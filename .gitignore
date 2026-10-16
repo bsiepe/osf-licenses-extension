@@ -2,7 +2,7 @@
 materials/
 
 # osf api cache from 01_collect_osf_licenses.R
-*_cache.rds
+*_cache*.rds
 
 # r and rstudio
 .Rproj.user/
