@@ -92,12 +92,15 @@ tibble(
 
 
 # license per object and paper --------------------------------------------
-# LICENSE file, same file name rule as Quintana's self_reusability_audit.R
+# LICENSE file. "license" can be anywhere in the name (e.g. "6. License.txt"),
+# copying and copyright have to start it, so "copying_task.csv" does not count
+is_license_file <- function(file) {
+  grepl("licen[sc]e", file, ignore.case = TRUE) |
+    grepl("^(copying|copyright)([._ -]|$)", file, ignore.case = TRUE)
+}
 license_files <- osf_files |>
   group_by(doi, osf_project) |>
-  summarise(license_file = any(grepl("^(licen[sc]e|copying|copyright)([._ -]|$)",
-                                     file, ignore.case = TRUE)),
-            .groups = "drop")
+  summarise(license_file = any(is_license_file(file)), .groups = "drop")
 
 # left join, objects without a file listing have no row in license_files
 object_licenses <- object_licenses |>
@@ -306,11 +309,14 @@ plot_trend <- ggplot(by_period_all, aes(period, pct / 100, colour = journal, gro
   geom_point(size = 2.5) +
   ggrepel::geom_text_repel(data = slope_labels, aes(label = lab),
                            hjust = 0, nudge_x = 0.15, direction = "y", segment.color = NA,
+                           # keep the labels right of the 2025 points
+                           xlim = c(2.13, NA),
                            size = 3.9, colour = "grey20", family = FONT) +
   scale_colour_manual(values = journal_cols, guide = "none") +
   scale_linetype_manual(values = c("solid", "22"), guide = "none") +
   scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
-  scale_x_discrete(expand = expansion(add = c(0.3, 1.4))) +
+  # room on the right for the labels
+  scale_x_discrete(expand = expansion(add = c(0.25, 1.5))) +
   labs(x = "Publication year", y = "OSF-sharing papers with a license") +
   theme_dv("h") +
   theme(axis.line.x = element_blank())
@@ -328,7 +334,7 @@ dumbbell_points <- dumbbell |>
   mutate(period = if_else(period == "after", "2025", "2015 + 2020"),
          # put each label on the outer side of its dot
          outer = (period == "2025") == up,
-         lab_x = pct / 100 + if_else(outer, 0.03, -0.03),
+         lab_x = pct / 100 + if_else(outer, 0.045, -0.045),
          lab = sprintf("%d%% (%d)", pct, n))
 
 plot_dumbbell <- ggplot(dumbbell, aes(y = row, colour = journal)) +
@@ -371,16 +377,18 @@ print(select(license_counts, short, license_name, n))
 plot_types <- ggplot(license_counts, aes(n, reorder(short, n))) +
   geom_col(fill = OKABE_ITO[["blue"]], width = 0.7) +
   geom_text(aes(label = n), hjust = -0.3, size = 3.9, colour = "grey20", family = FONT) +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.12))) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
   labs(x = "Licensed OSF objects", y = NULL) +
   theme_dv("v")
 
 dir.create("figures", showWarnings = FALSE)
-fig <- plot_trend + plot_types + plot_annotation(tag_levels = "a") &
+fig <- plot_trend + plot_types + plot_layout(widths = c(1.3, 1)) +
+  plot_annotation(tag_levels = "a") &
   theme(text = element_text(family = FONT))
-ggsave("figures/plot_licenses.pdf", fig, width = 11, height = 5.5)
+# close to the text width of the paper, so the fonts are not scaled down much
+ggsave("figures/plot_licenses.pdf", fig, width = 8, height = 4.5)
 
 fig_dumbbell <- plot_dumbbell + plot_types + plot_layout(widths = c(1.4, 1)) +
   plot_annotation(tag_levels = "a") &
   theme(text = element_text(family = FONT))
-ggsave("figures/plot_licenses_dumbbell.pdf", fig_dumbbell, width = 11, height = 5.5)
+ggsave("figures/plot_licenses_dumbbell.pdf", fig_dumbbell, width = 8, height = 4.5)
