@@ -1,0 +1,17 @@
+Type: project
+Title: Licenses of shared OSF materials in psychology
+Description: Packages used by the scripts, recorded in renv.lock. cowplot is
+    not loaded by our scripts but by theme_dataviz.R in the original materials,
+    which 02_analyse_licenses.R sources.
+Imports:
+    broom,
+    cowplot,
+    dplyr,
+    ggplot2,
+    ggrepel,
+    httr2,
+    keyring,
+    patchwork,
+    scales,
+    showtext,
+    tidyr
