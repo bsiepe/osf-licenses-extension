@@ -8,9 +8,10 @@
 # describes licensing by year, journal, code sharing and documentation. Then adds
 # licensing to the paper's download models and draws figures/plot_licenses.pdf.
 # A linked OSF object counts as licensed if it has a license, or one of its direct children has
-# a license, or if its file listing has a LICENSE file. A paper is licensed if
-# any of its objects is. "No license" on OSF counts as unlicensed, "Other"
-# (a custom license) as licensed.
+# a license, or if its file listing has a LICENSE file, or if its README or
+# description states a license (hand-coded passages in data/license_mentions.csv).
+# A paper is licensed if any of its objects is. "No license" on OSF counts as
+# unlicensed, "Other" (a custom license) as licensed.
 #------------------------------------------------------------------------------#
 
 
@@ -35,17 +36,22 @@ in_materials <- function(expr) {
 SKIP_SAVE <- TRUE
 in_materials(source("analyse_download_predictors.R"))
 
-# number and share of licensed papers per group
+# number and share of licensed papers per group, with an exact 95% interval
+# (clopper-pearson, from binom.test)
 share_licensed <- function(data, ...) {
+  ci <- \(x, n, side) mapply(\(x, n) binom.test(x, n)$conf.int[side], x, n)
   data |>
     group_by(...) |>
-    summarise(n = n(), n_licensed = sum(licensed), pct = round(100 * mean(licensed)),
-              .groups = "drop")
+    summarise(n = n(), n_licensed = sum(licensed), .groups = "drop") |>
+    mutate(pct = round(100 * n_licensed / n),
+           ci_low = round(100 * ci(n_licensed, n, 1)),
+           ci_high = round(100 * ci(n_licensed, n, 2)))
 }
 
 
 # load data ---------------------------------------------------------------
 object_licenses <- read.csv("data/osf_licenses.csv")
+mentions <- read.csv("data/license_mentions.csv")
 osf_files <- read.csv(file.path(MAT_DIR, "osf_file_downloads.csv"))
 paper_downloads <- read.csv(file.path(MAT_DIR, "osf_paper_downloads.csv"))
 documentation <- read.csv(file.path(MAT_DIR, "documentation_levels.csv"))
@@ -102,12 +108,26 @@ license_files <- osf_files |>
   group_by(doi, osf_project) |>
   summarise(license_file = any(is_license_file(file)), .groups = "drop")
 
-# left join, objects without a file listing have no row in license_files
+# license stated in a readme or description. passages that are not coded yet
+# count as no license
+if (any(!mentions$states_license %in% c("yes", "no"))) {
+  warning("license_mentions.csv has passages that are not coded yet")
+}
+text_licenses <- mentions |>
+  group_by(node_id) |>
+  summarise(license_readme = any(source == "readme" & states_license %in% "yes"),
+            license_description = any(source == "description" & states_license %in% "yes"))
+
+# left joins, objects without a file listing have no row in license_files and
+# most objects have no passage in text_licenses
 object_licenses <- object_licenses |>
   left_join(license_files, by = c("doi", "osf_project")) |>
+  left_join(text_licenses, by = "node_id") |>
   mutate(license_file = license_file %in% TRUE,
+         license_readme = license_readme %in% TRUE,
+         license_description = license_description %in% TRUE,
          licensed = license_set %in% TRUE | coalesce(n_children_licensed, 0L) > 0 |
-           license_file)
+           license_file | license_readme | license_description)
 
 # papers link up to 12 OSF objects. licensed if at least one of them is
 paper_summary <- object_licenses |>
@@ -120,6 +140,8 @@ paper_summary <- object_licenses |>
     chose_no_lic = any(license_name %in% "No license"),
     license_types = paste(sort(unique(license_name[license_set %in% TRUE])), collapse = "; "),
     license_file = any(license_file),
+    license_readme = any(license_readme),
+    license_description = any(license_description),
     licensed = any(licensed)
   )
 
@@ -145,18 +167,26 @@ tibble(unit = c("papers", "linked OSF objects"),
   mutate(not_licensed = n - licensed, pct_licensed = round(100 * licensed / n)) |>
   print()
 
-# where the license of a paper comes from. exclusive, so each paper counts once
-papers |>
+# where the license of a paper comes from. osf_object and the "_only" routes
+# are exclusive, so each paper counts once there. the osf license field is the only
+# machine-readable source and the one shown on the project page
+license_routes <- papers |>
+  mutate(osf_field = osf_license | child_license) |>
   summarise(
     osf_object = sum(osf_license),
     child_only = sum(!osf_license & child_license),
-    license_file_only = sum(!osf_license & !child_license & license_file),
+    license_file_only = sum(!osf_field & license_file),
+    readme_only = sum(!osf_field & !license_file & license_readme),
+    description_only = sum(!osf_field & !license_file & !license_readme & license_description),
     no_license_chosen = sum(!licensed & chose_no_lic),
-    any_license_file = sum(license_file)
+    any_osf_field = sum(osf_field),
+    any_license_file = sum(license_file),
+    any_readme = sum(license_readme),
+    any_description = sum(license_description)
   ) |>
   tidyr::pivot_longer(everything(), names_to = "route", values_to = "n") |>
-  mutate(pct = round(100 * n / nrow(papers))) |>
-  print()
+  mutate(pct = round(100 * n / nrow(papers)))
+print(license_routes)
 
 # license types, counted per OSF object whose license we read (a project and
 # a file in it can both be linked by the same paper)
@@ -201,6 +231,21 @@ papers_no_reg <- papers |>
   select(doi, journal, period) |>
   inner_join(no_reg, by = "doi")
 print(share_licensed(papers_no_reg, journal, period))
+
+# shares for the text, overall, per period and per journal and period, with
+# and without registrations
+rate_table <- function(data) {
+  bind_rows(share_licensed(data),
+            share_licensed(data, period),
+            share_licensed(data, journal, period)) |>
+    mutate(across(c(journal, period), \(x) coalesce(x, "all")))
+}
+rates_for_text <- bind_rows(all_objects = rate_table(papers),
+                            without_registrations = rate_table(papers_no_reg),
+                            .id = "objects") |>
+  mutate(text = sprintf("%d%% [95%% CI %d, %d]", pct, ci_low, ci_high))
+print(select(rates_for_text, objects, journal, period, n, n_licensed, text),
+      n = Inf, width = Inf)
 
 
 # code sharing and documentation ------------------------------------------
@@ -252,7 +297,7 @@ download_models <- lapply(model_formulas, \(f) {
 })
 
 # licensed is 0/1, so exp(b) - 1 is the % difference in downloads
-lapply(download_models, \(m) {
+licensed_effects <- lapply(download_models, \(m) {
   broom::tidy(m, conf.int = TRUE) |>
     filter(term == "licensedTRUE") |>
     mutate(adj_r2 = summary(m)$adj.r.squared)
@@ -261,8 +306,8 @@ lapply(download_models, \(m) {
   mutate(pct = round(100 * (exp(estimate) - 1)),
          across(c(estimate, conf.low, conf.high, adj_r2), \(x) round(x, 2)),
          p.value = signif(p.value, 2)) |>
-  select(model, estimate, conf.low, conf.high, pct, p.value, adj_r2) |>
-  print()
+  select(model, estimate, conf.low, conf.high, pct, p.value, adj_r2)
+print(licensed_effects)
 
 print(round(coef(summary(download_models$total_doc_prereg)), 3))
 
@@ -331,7 +376,7 @@ dumbbell_points <- dumbbell |>
   select(row, journal, up, pct_before, pct_after, n_before, n_after) |>
   tidyr::pivot_longer(c(pct_before, pct_after, n_before, n_after),
                       names_to = c(".value", "period"), names_sep = "_") |>
-  mutate(period = if_else(period == "after", "2025", "2015 + 2020"),
+  mutate(period = if_else(period == "after", "2025", "2015 & 2020"),
          # put each label on the outer side of its dot
          outer = (period == "2025") == up,
          lab_x = pct / 100 + if_else(outer, 0.045, -0.045),
@@ -347,13 +392,35 @@ plot_dumbbell <- ggplot(dumbbell, aes(y = row, colour = journal)) +
             size = 3.9, colour = "grey20", family = FONT) +
   scale_colour_manual(values = journal_cols, guide = "none") +
   scale_linetype_manual(values = c("solid", "22"), guide = "none") +
-  scale_shape_manual(values = c("2015 + 2020" = 21, "2025" = 19), name = NULL) +
+  scale_shape_manual(values = c("2015 & 2020" = 21, "2025" = 19), name = NULL) +
   # room for the labels left of 0% and right of 100%
   scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25), labels = scales::percent,
                      expand = expansion(add = c(0.25, 0.22))) +
   labs(x = "OSF-sharing papers with a license", y = NULL) +
   theme_dv("v") +
   theme(legend.position = "top", axis.line = element_blank())
+
+# version 3: one panel per journal, with 95% intervals
+facet_data <- by_period_all |>
+  mutate(journal = factor(journal, levels = c("Psych Sci", "Cognition", "JESP", "JML",
+                                              "All journals")),
+         # labels left of the earlier point and right of the 2025 point
+         before = period != "2025",
+         lab_x = as.numeric(factor(period)) + if_else(before, -0.12, 0.12))
+
+plot_facets <- ggplot(facet_data, aes(period, pct / 100, colour = journal, group = journal)) +
+  geom_line(linewidth = 0.6, alpha = 0.5) +
+  geom_linerange(aes(ymin = ci_low / 100, ymax = ci_high / 100), linewidth = 0.9) +
+  geom_point(size = 2.5) +
+  geom_text(aes(x = lab_x, label = sprintf("%d%%", pct), hjust = if_else(before, 1, 0)),
+            size = 3.5, colour = "grey20", family = FONT) +
+  facet_wrap(~ journal, nrow = 1) +
+  scale_colour_manual(values = journal_cols, guide = "none") +
+  scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+  scale_x_discrete(labels = c("2015 + 2020" = "2015/\n2020", "2025" = "2025"),
+                   expand = expansion(add = 0.7)) +
+  labs(x = "Publication year", y = "OSF-sharing papers with a license") +
+  theme_dv("h")
 
 # panel b: license types as SPDX identifiers (spdx.org/licenses). names not in
 # the list are kept as they are. the full names go in the figure note
@@ -392,3 +459,6 @@ fig_dumbbell <- plot_dumbbell + plot_types + plot_layout(widths = c(1.4, 1)) +
   plot_annotation(tag_levels = "a") &
   theme(text = element_text(family = FONT))
 ggsave("figures/plot_licenses_dumbbell.pdf", fig_dumbbell, width = 8, height = 4.5)
+
+fig_facets <- plot_facets & theme(text = element_text(family = FONT))
+ggsave("figures/plot_licenses_facets.pdf", fig_facets, width = 8, height = 4)
