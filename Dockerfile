@@ -1,0 +1,24 @@
+# R 4.6.1 as in renv.lock, packages restored from the lockfile.
+# the project is mounted at run time, so outputs land in data/ and figures/:
+#   docker build -t osf-licenses .
+#   docker run --rm -v "$(pwd):/project" osf-licenses
+FROM rocker/r-ver:4.6.1
+
+# make for the Makefile, freetype and libpng for showtext (fonts in the figure),
+# poppler and libjpeg for pdftools and qpdf (readmes in 01)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends make libfreetype-dev libpng-dev \
+       libpoppler-cpp-dev libjpeg-dev zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# library outside /project, so mounting the project does not hide it.
+# no renv cache, the packages are copied into the library directly
+ENV RENV_PATHS_LIBRARY=/opt/renv/library \
+    RENV_CONFIG_CACHE_ENABLED=FALSE
+
+WORKDIR /project
+COPY renv.lock .Rprofile ./
+COPY renv/activate.R renv/settings.json renv/
+RUN R -q -e "renv::restore(prompt = FALSE)"
+
+CMD ["make"]
