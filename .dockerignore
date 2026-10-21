@@ -1,0 +1,6 @@
+# the image only needs the renv files, the project is mounted at run time
+*
+!renv.lock
+!.Rprofile
+!renv/activate.R
+!renv/settings.json
