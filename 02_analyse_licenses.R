@@ -7,11 +7,12 @@
 # Builds a license indicator per paper from data/osf_licenses.csv (from 01) and
 # describes licensing by year, journal, code sharing and documentation. Then adds
 # licensing to the paper's download models and draws figures/plot_licenses.pdf.
-# A linked OSF object counts as licensed if it has a license, or one of its direct children has
-# a license, or if its file listing has a LICENSE file, or if its README or
-# description states a license (hand-coded passages in data/license_mentions.csv).
-# A paper is licensed if any of its objects is. "No license" on OSF counts as
-# unlicensed, "Other" (a custom license) as licensed.
+# A linked OSF object counts as licensed if it or one of its components (any
+# depth, data/osf_components.csv) has a license, if its file listing has a
+# LICENSE file, if a GitHub repository connected as storage has a license, or if
+# its README or description states a license (hand-coded passages in
+# data/license_mentions.csv). A paper is licensed if any of its objects is.
+# "No license" on OSF counts as unlicensed, "Other" (a custom license) as licensed.
 #------------------------------------------------------------------------------#
 
 
@@ -19,6 +20,12 @@
 library(dplyr)
 library(ggplot2)
 library(patchwork)
+
+# News Cycle from Google Fonts, downloaded on every run (needs internet)
+library(showtext)
+FONT <- "News Cycle"
+font_add_google(FONT)
+showtext_auto()
 
 MAT_DIR <- file.path("materials", "v1.1.0")
 if (!dir.exists(MAT_DIR)) stop("run 00_get_materials.R first")
@@ -48,9 +55,27 @@ share_licensed <- function(data, ...) {
            ci_high = round(100 * ci(n_licensed, n, 2)))
 }
 
+# OSF license names as SPDX identifiers (spdx.org/licenses). names not in the
+# list are kept as they are
+license_abbr <- c(
+  "CC-By Attribution 4.0 International" = "CC-BY-4.0",
+  "CC0 1.0 Universal" = "CC0-1.0",
+  "CC-By Attribution-NonCommercial-NoDerivatives 4.0 International" = "CC-BY-NC-ND-4.0",
+  "CC-By Attribution-ShareAlike 4.0 International" = "CC-BY-SA-4.0",
+  "CC-BY Attribution-NonCommercial 4.0 International" = "CC-BY-NC-4.0",
+  "MIT License" = "MIT",
+  "BSD 2-Clause \"Simplified\" License" = "BSD-2-Clause",
+  "GNU Lesser General Public License (LGPL) 3.0" = "LGPL-3.0",
+  "GNU General Public License (GPL) 3.0" = "GPL-3.0",
+  "Apache License 2.0" = "Apache-2.0",
+  "Academic Free License (AFL) 3.0" = "AFL-3.0"
+)
+to_spdx <- function(name) coalesce(unname(license_abbr[name]), name)
+
 
 # load data ---------------------------------------------------------------
 object_licenses <- read.csv("data/osf_licenses.csv")
+components <- read.csv("data/osf_components.csv")
 mentions <- read.csv("data/license_mentions.csv")
 osf_files <- read.csv(file.path(MAT_DIR, "osf_file_downloads.csv"))
 paper_downloads <- read.csv(file.path(MAT_DIR, "osf_paper_downloads.csv"))
@@ -203,7 +228,7 @@ print(license_counts)
 # and trends over years are hard to interpret. we only compare before and after
 # Psychological Science's open license requirement (submissions from 2024).
 # 2015 has only 45 papers (42 in Psych Sci), so it is pooled with 2020
-papers$period <- if_else(papers$year == 2025, "2025", "2015 + 2020")
+papers$period <- if_else(papers$year == 2025, "2025", "2015 & 2020")
 
 print(share_licensed(papers, journal, year), n = Inf)
 by_period <- share_licensed(papers, journal, period)
@@ -313,11 +338,7 @@ print(round(coef(summary(download_models$total_doc_prereg)), 3))
 
 
 # figure ------------------------------------------------------------------
-# News Cycle from Google Fonts, downloaded on every run (needs internet)
-library(showtext)
-FONT <- "News Cycle"
-font_add_google(FONT)
-showtext_auto()
+
 
 # journal abbreviations and colours as in the paper's Figure 2b
 journal_abbr <- c("Psychological Science" = "Psych Sci",
@@ -366,7 +387,7 @@ plot_trend <- ggplot(by_period_all, aes(period, pct / 100, colour = journal, gro
   theme_dv("h") +
   theme(axis.line.x = element_blank())
 
-# version 2: dumbbell chart, open dot 2015 + 2020, filled dot 2025.
+# version 2: dumbbell chart, open dot 2015 & 2020, filled dot 2025.
 # rows sorted by the 2025 share, all journals at the bottom
 dumbbell <- before_after |>
   mutate(up = pct_after >= pct_before) |>
@@ -445,7 +466,7 @@ plot_types <- ggplot(license_counts, aes(n, reorder(short, n))) +
   geom_col(fill = OKABE_ITO[["blue"]], width = 0.7) +
   geom_text(aes(label = n), hjust = -0.3, size = 3.9, colour = "grey20", family = FONT) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
-  labs(x = "Licensed OSF objects", y = NULL) +
+  labs(x = "Licensed papers", y = NULL) +
   theme_dv("v")
 
 dir.create("figures", showWarnings = FALSE)
