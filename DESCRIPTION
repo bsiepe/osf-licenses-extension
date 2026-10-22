@@ -17,4 +17,5 @@ Imports:
     pdftools,
     scales,
     showtext,
-    tidyr
+    tidyr,
+    knitr
