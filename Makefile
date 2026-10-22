@@ -1,7 +1,8 @@
 # reproduce the analysis from the crawl snapshot in data/
 #   make          download materials, run 02 and 04
-#   make crawl    query OSF again (needs a token, overwrites data/osf_licenses.csv
-#                 and data/license_mentions.csv, the coding of known passages is kept)
+#   make crawl    query OSF again (needs a token, overwrites data/osf_licenses.csv,
+#                 data/osf_components.csv and data/license_mentions.csv, the coding
+#                 of known passages is kept)
 #   make docker   the same as make, inside the docker image
 # 03 is not run: it drew the manual check sample once, the coding is based on it
 
