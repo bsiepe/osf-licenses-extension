@@ -1,11 +1,29 @@
 ---
 title: "Supplement: Licenses of shared OSF materials"
-author: "Björn Siepe"
-format: html
+author: 
+ - name: Björn S. Siepe
+   orcid: 0000-0002-9558-4648
+   affiliations: University of Marburg
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    number-sections: true
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+    code-summary: "Show the code"
+    fig-width: 7
+    fig-height: 4.5
+    fig-align: "center"
+    embed-resources: true
 execute:
-  echo: false
-  warning: false
   message: false
+  warning: false
+  eval: true
+knitr:
+  opts_chunk:
+    fig.showtext: true
 ---
 
 ```{r}
@@ -35,18 +53,14 @@ object pairs by `r n_distinct(pairs$doi)` papers (`r n_shared_ids` ids are linke
 papers). A link to a single file is resolved to the project or registration that holds it,
 the same rule as in Quintana's `collect_osf_documentation.R`.
 
-**Population.** The `r nrow(papers)` papers in `osf_readme_presence.csv`, the paper's
+**Population.** The `r nrow(papers)` papers in `osf_readme_presence.csv`, which is the paper's
 denominator for documentation: empirical papers sharing on OSF with a readable file
 listing.
 
 **Sources of a license.**
 
-- *OSF license field* of each linked object, mapped to OSF's license names. Components
-  carry their own license, so all components below a linked object are read, at any depth.
-  Copyright-holder names are not stored, only whether one is given.
-- *LICENSE files*: file names containing `license` or `licence`, or starting with
-  `COPYING` or `COPYRIGHT`, in the deposit's file listing. The listing covers components at
-  any depth and add-on storage such as GitHub; for registrations it covers only OSF
+- *OSF license field* of each linked object, mapped to OSF's license names. Components carry their own license, so all components below a linked object are read, at any depth. Copyright-holder names are not stored, only whether one is given.
+- *LICENSE files*: file names containing `license` or `licence`, or starting with `COPYING` or `COPYRIGHT`, in the deposit's file listing. The listing covers components at any depth and add-on storage such as GitHub; for registrations it covers only OSF
   storage, not components.
 - *GitHub add-ons*: an OSF project can mirror a GitHub repository as storage. We record the
   license GitHub detects in the repository and count it like a LICENSE file. GitHub's
