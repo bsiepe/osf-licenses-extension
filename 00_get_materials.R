@@ -1,8 +1,5 @@
 #------------------------------------------------------------------------------#
 # Download original materials
-# Project: license extension to Quintana, "Shared research materials in
-# psychology are widely downloaded but often difficult to reuse"
-# Author: Björn Siepe
 #
 # Downloads v1.1.0 of the original deposit from Zenodo, checks the md5 and
 # unzips it to materials/v1.1.0/.

@@ -1,0 +1,174 @@
+---
+title: "Supplement: Licenses of shared OSF materials"
+author: "Björn Siepe"
+format: html
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| include: false
+library(knitr)
+library(dplyr)
+source("02_analyse_licenses.R")
+
+# numbers for the method text
+readme_presence <- read.csv(file.path(MAT_DIR, "osf_readme_presence.csv"))
+strata <- read.csv("data/manual_check_strata.csv")
+pairs <- distinct(object_licenses, doi, osf_project)
+n_shared_ids <- sum(table(pairs$osf_project) > 1)
+
+# pairs without a row in the deposit's documentation coding, by object type
+doc_llm <- read.csv(file.path(MAT_DIR, "osf_documentation_llm.csv"))
+doc_missing <- distinct(osf_files, doi, osf_project) |>
+  anti_join(doc_llm, by = c("doi", "osf_project")) |>
+  left_join(distinct(object_licenses, osf_project, holder_type), by = "osf_project")
+```
+
+## Method
+
+**Objects.** We checked every OSF id in the deposit's `osf_file_downloads.csv`:
+`r n_distinct(pairs$osf_project)` distinct objects, linked as `r nrow(pairs)` paper and
+object pairs by `r n_distinct(pairs$doi)` papers (`r n_shared_ids` ids are linked by two
+papers). A link to a single file is resolved to the project or registration that holds it,
+the same rule as in Quintana's `collect_osf_documentation.R`.
+
+**Population.** The `r nrow(papers)` papers in `osf_readme_presence.csv`, the paper's
+denominator for documentation: empirical papers sharing on OSF with a readable file
+listing.
+
+**Sources of a license.**
+
+- *OSF license field* of each linked object, mapped to OSF's license names. Components
+  carry their own license, so all components below a linked object are read, at any depth.
+  Copyright-holder names are not stored, only whether one is given.
+- *LICENSE files*: file names containing `license` or `licence`, or starting with
+  `COPYING` or `COPYRIGHT`, in the deposit's file listing. The listing covers components at
+  any depth and add-on storage such as GitHub; for registrations it covers only OSF
+  storage, not components.
+- *GitHub add-ons*: an OSF project can mirror a GitHub repository as storage. We record the
+  license GitHub detects in the repository and count it like a LICENSE file. GitHub's
+  `NOASSERTION` (a license file it cannot match) counts as licensed, like "Other" on OSF.
+- *READMEs and descriptions*: the description of every object and of its direct
+  components, and the README files of the `r sum(readme_presence$has_readme)` papers whose
+  file listing has one (file names matching `readme`, `read me` or `read_me`, as in
+  Quintana's `analyse_osf_readme.R`). The deposit lists file names without ids, so the file
+  tree is walked again, including components at any depth, until all listed READMEs are
+  found. PDF and Word files are converted to text. Every passage containing `licen[sc]`,
+  with 200 characters on each side, is coded by hand (see below).
+
+**Licensed paper.** A paper is licensed if any linked object or component has a license in
+the OSF field, if there is a LICENSE file or a licensed GitHub add-on, or if a passage is
+coded as stating a license. OSF's "No license" counts as unlicensed, "Other" (a custom
+license) as licensed. We also report results for the OSF license field alone, the only
+machine-readable source and the one shown on the project page.
+
+**License types.** A paper can have more than one license, e.g. CC BY for data and MIT for
+code. `license_types` in `data/license_by_paper.csv` lists all of them as SPDX ids (OSF
+field, GitHub, coded passages), `osf_license_types` the OSF field only. The type of a
+LICENSE file in the OSF listing is not read.
+
+**Download models.** We add `licensed` to the paper's models of total and peak single-file
+downloads. `02_analyse_licenses.R` loads `pred_prepare_data()` and `pred_build_dm()` from
+Quintana's `analyse_download_predictors.R` instead of copying them, so population,
+predictors and coding are the paper's. Without `licensed` the models reproduce the
+published estimates. Further models add documentation and preregistration as covariates.
+
+## Coding schemes
+
+### License mentions
+
+Each row of `data/license_mentions.csv` is one description or README with at least one
+mention (`r nrow(mentions)` rows). Re-running `01` keeps the coding and leaves new passages
+empty; `02` warns if any are uncoded and counts them as no license.
+
+| Column | Coding |
+|---|---|
+| `states_license` | `yes` if the text states a license for the shared materials or for part of them (e.g. one tool); `no` for other uses of the word: licenses of third-party data or software (Matlab, LDC corpora), or "license" in another sense. |
+| `license_name` | SPDX ids, several separated by `; ` (e.g. `CC-BY-4.0; GPL-3.0`). |
+| `coding_note` | Reason for unclear cases. |
+
+### Manual check
+
+`03_sample_manual_check.R` drew `r nrow(strata)` papers, stratified so that error-prone
+cases are covered. It includes every paper licensed only through a child component, a
+LICENSE file or a README. The sheet is in random order and does not show our coding. Each
+paper is coded in `data/manual_check.csv` by opening its OSF links.
+
+```{r}
+strata |>
+  count(stratum, name = "papers") |>
+  knitr::kable()
+```
+
+| Column | Coding |
+|---|---|
+| `license_osf` | `yes` if a linked project or registration, or one of its direct components, shows a license on its OSF page; else `no`. "No license" counts as `no`. For a link to a single file, check the project or registration holding it. |
+| `license_osf_name` | The license shown, as on OSF or as SPDX id (e.g. `CC-BY-4.0`, `CC0-1.0`, `MIT`). |
+| `license_other` | `yes` if a license is stated anywhere else: a LICENSE or README file, the project description, the wiki, or a deeper component; else `no`. |
+| `license_other_where` | Where: `file`, `readme`, `description`, `wiki` or `component`. |
+| `checked_on` | Date of the check (licenses can change after the crawl). |
+| `notes` | Anything unclear. |
+
+`04_evaluate_manual_check.R` compares this coding with ours: agreement and kappa for the
+OSF license field, and per stratum how often a license is stated somewhere we do not look.
+
+## Licensing rates
+
+```{r}
+rates_for_text |>
+  select(objects, journal, period, n, n_licensed, text) |>
+  knitr::kable()
+```
+
+```{r}
+knitr::kable(license_routes)
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+#| fig-showtext: true
+fig_facets
+```
+
+## License types
+
+```{r}
+knitr::kable(select(license_counts, short, license_name, n, pct))
+```
+
+## Downloads
+
+```{r}
+knitr::kable(licensed_effects)
+```
+
+## Limitations
+
+- Licenses are read at the crawl date, not at publication; authors can add or change a
+  license later.
+- OSF asks for a license when a registration is created, and *Psychological Science*
+  requires an open license for submissions from 2024. Both raise the 2025 rate without an
+  author choosing a license, so rates are also reported with registrations left out.
+- GitHub repositories linked in the paper or the OSF description, rather than connected as
+  storage, are not checked. Many of them are third-party tools (e.g. PsychoPy) whose
+  license says nothing about the shared materials.
+- Papers linking private projects through view-only links are not covered: the keys are
+  redacted in the deposit, and those papers are outside the population.
+- READMEs and descriptions are only searched for "license" or "licence". A statement like
+  "data: CC0" without that word is missed, as are licenses in the wiki, in files not named
+  README, and in scanned PDFs. READMEs are read only for papers whose file listing in the
+  deposit has one, and not all listed READMEs could be found for one registration.
+- All associations with downloads are observational.
+
+## A note on the deposit
+
+`r nrow(doc_missing)` of the paper and object pairs in `osf_file_downloads.csv` have no row
+in the deposit's `osf_documentation_llm.csv`
+(`r sum(doc_missing$holder_type %in% "registrations")` of them registrations), from
+`r n_distinct(doc_missing$doi)` papers. For these objects, no description or wiki was
+assessed.
+This may be intentional and does not affect the license analysis.
