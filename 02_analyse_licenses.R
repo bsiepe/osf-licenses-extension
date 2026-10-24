@@ -373,17 +373,21 @@ slope_labels <- by_period_all |>
 plot_trend <- ggplot(by_period_all, aes(period, pct / 100, colour = journal, group = journal)) +
   geom_line(aes(linetype = overall), linewidth = 1) +
   geom_point(size = 2.5) +
+# grey lines from each label to its point, the colours alone are hard to
+  # tell apart on white
   ggrepel::geom_text_repel(data = slope_labels, aes(label = lab),
-                           hjust = 0, nudge_x = 0.15, direction = "y", segment.color = NA,
+                           hjust = 0, nudge_x = 0.3, direction = "y",
+segment.color = "grey60", segment.size = 0.4,
+                           min.segment.length = 0, point.padding = 0.3,
                            # keep the labels right of the 2025 points
-                           xlim = c(2.13, NA),
+                           xlim = c(2.25, NA),
                            size = 3.9, colour = "grey20", family = FONT) +
   scale_colour_manual(values = journal_cols, guide = "none") +
   scale_linetype_manual(values = c("solid", "22"), guide = "none") +
   scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
   # room on the right for the labels
   scale_x_discrete(expand = expansion(add = c(0.25, 1.5))) +
-  labs(x = "Publication year", y = "OSF-sharing papers with a license") +
+  labs(x = "Publication year", y = "Percentage of papers with OSF materials that included a license") +
   theme_dv("h") +
   theme(axis.line.x = element_blank())
 
@@ -417,7 +421,7 @@ plot_dumbbell <- ggplot(dumbbell, aes(y = row, colour = journal)) +
   # room for the labels left of 0% and right of 100%
   scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25), labels = scales::percent,
                      expand = expansion(add = c(0.25, 0.22))) +
-  labs(x = "OSF-sharing papers with a license", y = NULL) +
+  labs(x = "OSF-sharing papers with a licence", y = NULL) +
   theme_dv("v") +
   theme(legend.position = "top", axis.line = element_blank())
 
@@ -438,35 +442,33 @@ plot_facets <- ggplot(facet_data, aes(period, pct / 100, colour = journal, group
   facet_wrap(~ journal, nrow = 1) +
   scale_colour_manual(values = journal_cols, guide = "none") +
   scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
-  scale_x_discrete(labels = c("2015 + 2020" = "2015/\n2020", "2025" = "2025"),
+  scale_x_discrete(labels = c("2015 & 2020" = "2015/\n2020", "2025" = "2025"),
                    expand = expansion(add = 0.7)) +
-  labs(x = "Publication year", y = "OSF-sharing papers with a license") +
+  labs(x = "Publication year", y = "OSF-sharing papers with a licence") +
   theme_dv("h")
 
-# panel b: license types as SPDX identifiers (spdx.org/licenses). names not in
-# the list are kept as they are. the full names go in the figure note
-license_abbr <- c(
-  "CC-By Attribution 4.0 International" = "CC-BY-4.0",
-  "CC0 1.0 Universal" = "CC0-1.0",
-  "CC-By Attribution-NonCommercial-NoDerivatives 4.0 International" = "CC-BY-NC-ND-4.0",
-  "CC-By Attribution-ShareAlike 4.0 International" = "CC-BY-SA-4.0",
-  "CC-BY Attribution-NonCommercial 4.0 International" = "CC-BY-NC-4.0",
-  "MIT License" = "MIT",
-  "BSD 2-Clause \"Simplified\" License" = "BSD-2-Clause",
-  "GNU Lesser General Public License (LGPL) 3.0" = "LGPL-3.0",
-  "GNU General Public License (GPL) 3.0" = "GPL-3.0",
-  "Apache License 2.0" = "Apache-2.0",
-  "Academic Free License (AFL) 3.0" = "AFL-3.0"
-)
-license_counts$short <- coalesce(unname(license_abbr[license_counts$license_name]),
-                                 license_counts$license_name)
-print(select(license_counts, short, license_name, n))
+# panel b: license types as SPDX identifiers. the full names go in the figure note.
+# types used by fewer than 5 papers go into "Other", and a separate bar shows the
+# unlicensed papers. "No license" and not "Unlicensed", which reads like the
+# Unlicense
+types_plot <- license_counts |>
+  mutate(short = forcats::fct_lump_min(short, min = 5, w = n, other_level = "Other")) |>
+  count(short, wt = n) |>
+  mutate(short = as.character(short)) |>
+  bind_rows(tibble(short = "No license", n = sum(!papers$licensed))) |>
+  mutate(none = short == "No license",
+         # largest type on top, other and no license at the bottom
+         short = forcats::fct_reorder(short, n),
+         short = forcats::fct_relevel(short, "No license", "Other"))
+print(types_plot)
 
-plot_types <- ggplot(license_counts, aes(n, reorder(short, n))) +
-  geom_col(fill = OKABE_ITO[["blue"]], width = 0.7) +
+plot_types <- ggplot(types_plot, aes(n, short, fill = none)) +
+  geom_col(width = 0.7) +
   geom_text(aes(label = n), hjust = -0.3, size = 3.9, colour = "grey20", family = FONT) +
+scale_fill_manual(values = c(`FALSE` = OKABE_ITO[["blue"]], `TRUE` = OKABE_ITO[["vermillion"]]),
+                    guide = "none") +
   scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
-  labs(x = "Licensed papers", y = NULL) +
+  labs(x = "Articles", y = NULL) +
   theme_dv("v")
 
 dir.create("figures", showWarnings = FALSE)
@@ -483,3 +485,21 @@ ggsave("figures/plot_licenses_dumbbell.pdf", fig_dumbbell, width = 8, height = 4
 
 fig_facets <- plot_facets & theme(text = element_text(family = FONT))
 ggsave("figures/plot_licenses_facets.pdf", fig_facets, width = 8, height = 4)
+
+
+# codebook ----------------------------------------------------------------
+# every column of the csv files in data/ should be in data/codebook.csv, and
+# nothing else
+codebook <- read.csv("data/codebook.csv")
+data_files <- setdiff(list.files("data", pattern = "\\.csv$"), "codebook.csv")
+for (f in union(data_files, codebook$file)) {
+  cols <- if (f %in% data_files) names(read.csv(file.path("data", f), nrows = 1)) else character()
+  documented <- codebook$column[codebook$file == f]
+  if (length(setdiff(cols, documented)) > 0) {
+    warning(f, ": not in the codebook: ", paste(setdiff(cols, documented), collapse = ", "))
+  }
+  if (length(setdiff(documented, cols)) > 0) {
+    warning(f, ": in the codebook but not in the file: ",
+            paste(setdiff(documented, cols), collapse = ", "))
+  }
+}
