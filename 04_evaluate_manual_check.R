@@ -25,7 +25,7 @@ if (nrow(coded) == 0) stop("no papers coded yet")
 check <- coded |>
   inner_join(strata, by = c("id", "doi")) |>
   inner_join(select(papers, doi, osf_license, child_license, license_file,
-                    licensed, osf_license_types), by = "doi") |>
+                    licensed, osf_license_types, license_types), by = "doi") |>
   mutate(manual_osf = tolower(trimws(license_osf)) == "yes",
          manual_other = tolower(trimws(license_other)) %in% "yes",
          manual_any = manual_osf | manual_other,
@@ -39,7 +39,7 @@ check <- coded |>
 # 1. OSF license field ----------------------------------------------------
 print(table(manual = check$manual_osf, crawler = check$ours_osf))
 cat("agreement:", round(100 * mean(check$manual_osf == check$ours_osf)), "%,",
-    "kappa:", round(psych::cohen.kappa(check$manual_osf, check$ours_osf), 2), "\n")
+    "kappa:", round(cohen.kappa(cbind(check$manual_osf, check$ours_osf))$kappa, 2), "\n")
 
 # license names, to compare by eye
 check |>
@@ -49,7 +49,7 @@ check |>
 
 
 # 2. licenses stated elsewhere --------------------------------------------
-# the sample is stratified, so look at this per stratum rather than overall.
+# the sample is stratified, so we look at this per stratum
 # the share in "unlicensed" estimates how many unlicensed papers state a
 # license somewhere we do not look
 check |>
@@ -59,6 +59,12 @@ check |>
   print()
 
 print(count(filter(check, manual_other), license_other_where, sort = TRUE))
+
+# license names from all sources
+check |>
+  filter(manual_other) |>
+  select(id, license_types, license_other_where, license_other_name) |>
+  print()
 
 
 # disagreements -----------------------------------------------------------
