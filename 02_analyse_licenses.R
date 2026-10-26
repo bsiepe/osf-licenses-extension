@@ -1,12 +1,9 @@
 #------------------------------------------------------------------------------#
 # Analyse licenses of shared OSF materials
-# Project: License extension to Quintana, "Shared research materials in
-# psychology are widely downloaded but often difficult to reuse"
-# Author: Björn Siepe
 #
 # Builds a license indicator per paper from data/osf_licenses.csv (from 01) and
-# describes licensing by year, journal, code sharing and documentation. Then adds
-# licensing to the paper's download models and draws figures/plot_licenses.pdf.
+# describes licensing by year, journal, code sharing and documentation, and draws
+# the figures in figures/.
 # A linked OSF object counts as licensed if it or one of its components (any
 # depth, data/osf_components.csv) has a license, if its file listing has a
 # LICENSE file, if a GitHub repository connected as storage has a license, or if
@@ -37,11 +34,8 @@ in_materials <- function(expr) {
   expr
 }
 
-# load the paper's functions for the download models (pred_prepare_data(),
-# pred_build_dm()) and its plot theme. SKIP_SAVE stops the script from running
-# its own analyses, as in plot_download_predictors_overview.R
-SKIP_SAVE <- TRUE
-in_materials(source("analyse_download_predictors.R"))
+# plot theme and colours of the paper (theme_dv(), OKABE_ITO)
+in_materials(source("theme_dataviz.R"))
 
 # number and share of licensed papers per group, with an exact 95% interval
 # (clopper-pearson, from binom.test)
@@ -80,8 +74,6 @@ mentions <- read.csv("data/license_mentions.csv")
 osf_files <- read.csv(file.path(MAT_DIR, "osf_file_downloads.csv"))
 paper_downloads <- read.csv(file.path(MAT_DIR, "osf_paper_downloads.csv"))
 documentation <- read.csv(file.path(MAT_DIR, "documentation_levels.csv"))
-prereg_flags <- read.csv(file.path(MAT_DIR, "prereg_flags.csv"))
-article_types <- read.csv(file.path(MAT_DIR, "article_type.csv"))
 
 # population: the 672 papers of the paper's documentation analysis, i.e. empirical
 # papers sharing on OSF with a readable file listing.
@@ -90,41 +82,11 @@ population <- read.csv(file.path(MAT_DIR, "osf_readme_presence.csv")) |>
   select(doi) |>
   left_join(distinct(osf_files, doi, journal, year), by = "doi")
 
-# download population and predictors of the paper, from its own function
-download_data <- in_materials(pred_prepare_data(verbose = FALSE))
-
-
-# populations -------------------------------------------------------------
-# how the deposit's paper counts relate. the paper reports 670 empirical papers
-# with download counts; its download models exclude repositories with partial
-# (mostly untracked external storage) or incomplete download data.
-# doi matching as in pred_prepare_data(): lower case, trimmed
-empirical <- tolower(trimws(article_types$doi[article_types$empirical %in% TRUE]))
-is_empirical <- function(doi) tolower(trimws(doi)) %in% empirical
-
-downloads_emp <- filter(paper_downloads, is_empirical(doi))
-downloads_complete <- filter(downloads_emp, !download_data_partial %in% TRUE)
-
-tibble(
-  step = c("file listing",
-           "file listing, empirical (license population)",
-           "download counts",
-           "download counts, empirical",
-           "- partial download data",
-           "- incomplete download data (download models)"),
-  n = c(n_distinct(osf_files$doi),
-        nrow(population),
-        nrow(paper_downloads),
-        nrow(downloads_emp),
-        nrow(downloads_complete),
-        nrow(download_data))
-) |>
-  print()
-
 
 # license per object and paper --------------------------------------------
 # LICENSE file. "license" can be anywhere in the name (e.g. "6. License.txt"),
-# copying and copyright have to start it, so "copying_task.csv" does not count
+# copying and copyright have to start it as a whole word ("COPYING", "copyright.txt"),
+# so "copyrighted_images.zip" does not count
 is_license_file <- function(file) {
   grepl("licen[sc]e", file, ignore.case = TRUE) |
     grepl("^(copying|copyright)([._ -]|$)", file, ignore.case = TRUE)
