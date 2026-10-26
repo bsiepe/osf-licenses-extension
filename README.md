@@ -27,11 +27,17 @@ The method, coding schemes, results and limitations are described in
 
 ### `data/`
 
-- `osf_licenses.csv`: license field of each linked OSF object (crawl snapshot)
-- `osf_components.csv`: licenses of components at any depth and of connected GitHub repositories
-- `license_mentions.csv`: passages mentioning a license in READMEs and descriptions, coded by hand
+- `osf_licenses.csv`: one row per paper and linked OSF object, with the object's OSF license (crawl snapshot)
+- `osf_components.csv`: one row per node below each object (the object itself at depth 0), with license, storage and GitHub add-on
+- `license_mentions.csv`: one row per README or description that mentions a license, coded by hand
 - `license_by_paper.csv`: one row per paper, whether and through which source it is licensed
-- `manual_check.csv`, `manual_check_strata.csv`: manual check of a stratified sample
+- `manual_check.csv`, `manual_check_strata.csv`: one row per paper in the manual check sample
+- `*.rds`: caches of the crawl, used by `01` only
+
+[`data/codebook.csv`](data/codebook.csv) describes every column. Files join on `doi` (paper)
+and `node_id` (OSF object). In its `source` column, `deposit` means Quintana's materials,
+`OSF API` and `GitHub API` mean the value as the API returned it, and `01`, `02`, `03` the
+script that computed it.
 
 ### `figures/`
 
