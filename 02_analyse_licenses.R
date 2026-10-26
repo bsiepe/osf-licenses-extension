@@ -105,16 +105,68 @@ text_licenses <- mentions |>
   summarise(license_readme = any(source == "readme" & states_license %in% "yes"),
             license_description = any(source == "description" & states_license %in% "yes"))
 
+# components at any depth below an object, and github repositories connected
+# as storage to the object or a component. depth 0 is the object itself, its
+# license_set is NA (its license is in osf_licenses.csv). "none" means the
+# repository has no license file
+component_licenses <- components |>
+  group_by(node_id) |>
+  summarise(component_license = any(license_set %in% TRUE),
+            license_github = any(!github_license %in% c(NA, "none")))
+
 # left joins, objects without a file listing have no row in license_files and
 # most objects have no passage in text_licenses
 object_licenses <- object_licenses |>
   left_join(license_files, by = c("doi", "osf_project")) |>
+  left_join(component_licenses, by = "node_id") |>
   left_join(text_licenses, by = "node_id") |>
   mutate(license_file = license_file %in% TRUE,
+         component_license = component_license %in% TRUE,
+         license_github = license_github %in% TRUE,
          license_readme = license_readme %in% TRUE,
          license_description = license_description %in% TRUE,
-         licensed = license_set %in% TRUE | coalesce(n_children_licensed, 0L) > 0 |
-           license_file | license_readme | license_description)
+         licensed = license_set %in% TRUE | component_license | license_file |
+           license_github | license_readme | license_description)
+
+# all licenses of an object as SPDX ids, as an object can carry several (e.g.
+# CC-BY for data and MIT for code)
+types_osf <- object_licenses |>
+  filter(license_set %in% TRUE) |>
+  mutate(source = "osf_field", license = to_spdx(license_name)) |>
+  select(node_id, source, license)
+
+types_components <- components |>
+  filter(license_set %in% TRUE) |>
+  mutate(source = "osf_field", license = to_spdx(license_name)) |>
+  select(node_id, source, license)
+
+types_github <- components |>
+  filter(!github_license %in% c(NA, "none")) |>
+  mutate(source = "github",
+         license = if_else(github_license == "NOASSERTION", "Other", github_license)) |>
+  select(node_id, source, license)
+
+# a passage can name several licenses, e.g. "CC-BY-4.0; GPL-3.0", one row each
+types_text <- mentions |>
+  filter(states_license %in% "yes") |>
+  mutate(source = "text", license = strsplit(license_name, "; ")) |>
+  select(node_id, source, license) |>
+  tidyr::unnest(license)
+
+# the same license can come from several components, so keep it once
+type_list <- bind_rows(types_osf, types_components, types_github, types_text) |>
+  distinct()
+
+# inner join, papers without any license have no row in type_list.
+# many-to-many on purpose: an object can have several licenses, and a few
+# objects are linked by two papers, both of which get the object's licenses
+paper_types <- object_licenses |>
+  distinct(doi, node_id) |>
+  inner_join(type_list, by = "node_id", relationship = "many-to-many") |>
+  group_by(doi) |>
+  summarise(osf_license_types = paste(sort(unique(license[source == "osf_field"])), collapse = "; "),
+            license_types = paste(sort(unique(license)), collapse = "; "),
+            n_license_types = n_distinct(license))
 
 # papers link up to 12 OSF objects. licensed if at least one of them is
 paper_summary <- object_licenses |>
@@ -123,20 +175,24 @@ paper_summary <- object_licenses |>
     n_objects = n(),
     n_unresolved = sum(is.na(node_id)),
     osf_license = any(license_set %in% TRUE),
-    child_license = any(n_children_licensed > 0, na.rm = TRUE),
+    child_license = any(component_license),
     chose_no_lic = any(license_name %in% "No license"),
-    license_types = paste(sort(unique(license_name[license_set %in% TRUE])), collapse = "; "),
     license_file = any(license_file),
+    license_github = any(license_github),
     license_readme = any(license_readme),
     license_description = any(license_description),
     licensed = any(licensed)
   )
 
-# inner join keeps only the population (3 non-empirical papers drop out)
+# inner join keeps only the population (3 non-empirical papers drop out).
+# left join for the types, unlicensed papers get none
 papers <- population |>
   inner_join(paper_summary, by = "doi") |>
   # drop papers where no linked object could be read (none in the current crawl)
-  filter(n_unresolved < n_objects)
+  filter(n_unresolved < n_objects) |>
+  left_join(paper_types, by = "doi") |>
+  mutate(across(c(osf_license_types, license_types), \(x) coalesce(x, "")),
+         n_license_types = coalesce(n_license_types, 0L))
 
 write.csv(papers, "data/license_by_paper.csv", row.names = FALSE)
 
@@ -166,11 +222,11 @@ license_routes <- papers |>
     github_only = sum(!osf_field & !license_file & license_github),
     readme_only = sum(!osf_field & !license_file & !license_github & license_readme),
     description_only = sum(!osf_field & !license_file & !license_github & !license_readme &
-license_description),
+                             license_description),
     no_license_chosen = sum(!licensed & chose_no_lic),
     any_osf_field = sum(osf_field),
     any_license_file = sum(license_file),
-any_github = sum(license_github),
+    any_github = sum(license_github),
     any_readme = sum(license_readme),
     any_description = sum(license_description)
   ) |>
@@ -191,11 +247,12 @@ spdx_names <- setNames(names(license_abbr), license_abbr)
 license_counts <- object_licenses |>
   filter(doi %in% papers$doi) |>
   distinct(doi, node_id) |>
+  # many-to-many as for paper_types above
   inner_join(type_list, by = "node_id", relationship = "many-to-many") |>
   distinct(doi, short = license) |>
   count(short, sort = TRUE) |>
   mutate(license_name = coalesce(unname(spdx_names[short]), short),
-pct = round(100 * n / sum(n)))
+         pct = round(100 * n / sum(n)))
 print(license_counts)
 
 
@@ -254,7 +311,7 @@ print(select(rates_for_text, objects, journal, period, n, n_licensed, text),
 by_code <- papers |>
   mutate(shares_code = doi %in% paper_downloads$doi[paper_downloads$n_code_files > 0]) |>
   share_licensed(shares_code)
-  print(by_code)
+print(by_code)
 
 # documented as in the paper: README or substantive reuse guidance in the OSF
 # description or wiki. inner join, every paper of the population is in
@@ -300,11 +357,11 @@ slope_labels <- by_period_all |>
 plot_trend <- ggplot(by_period_all, aes(period, pct / 100, colour = journal, group = journal)) +
   geom_line(aes(linetype = overall), linewidth = 1) +
   geom_point(size = 2.5) +
-# grey lines from each label to its point, the colours alone are hard to
+  # grey lines from each label to its point, the colours alone are hard to
   # tell apart on white
   ggrepel::geom_text_repel(data = slope_labels, aes(label = lab),
                            hjust = 0, nudge_x = 0.3, direction = "y",
-segment.color = "grey60", segment.size = 0.4,
+                           segment.color = "grey60", segment.size = 0.4,
                            min.segment.length = 0, point.padding = 0.3,
                            # keep the labels right of the 2025 points
                            xlim = c(2.25, NA),
@@ -314,7 +371,7 @@ segment.color = "grey60", segment.size = 0.4,
   scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
   # room on the right for the labels
   scale_x_discrete(expand = expansion(add = c(0.25, 1.5))) +
-  labs(x = "Publication year", y = "% of papers with OSF materials that included a licence") +
+  labs(x = "Publication year", y = "% of papers with OSF materials that included a license") +
   theme_dv("h") +
   theme(axis.line.x = element_blank())
 
@@ -392,7 +449,7 @@ print(types_plot)
 plot_types <- ggplot(types_plot, aes(n, short, fill = none)) +
   geom_col(width = 0.7) +
   geom_text(aes(label = n), hjust = -0.3, size = 3.9, colour = "grey20", family = FONT) +
-scale_fill_manual(values = c(`FALSE` = OKABE_ITO[["blue"]], `TRUE` = OKABE_ITO[["vermillion"]]),
+  scale_fill_manual(values = c(`FALSE` = OKABE_ITO[["blue"]], `TRUE` = OKABE_ITO[["vermillion"]]),
                     guide = "none") +
   scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
   labs(x = "Articles", y = NULL) +
