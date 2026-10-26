@@ -275,71 +275,22 @@ print(select(rates_for_text, objects, journal, period, n, n_licensed, text),
 
 # code sharing and documentation ------------------------------------------
 # n_code_files counts code in any language
-papers |>
+by_code <- papers |>
   mutate(shares_code = doi %in% paper_downloads$doi[paper_downloads$n_code_files > 0]) |>
-  share_licensed(shares_code) |>
-  print()
+  share_licensed(shares_code)
+  print(by_code)
 
 # documented as in the paper: README or substantive reuse guidance in the OSF
-# description or wiki
+# description or wiki. inner join, every paper of the population is in
+# documentation_levels.csv
 papers_doc <- inner_join(papers, select(documentation, doi, documented), by = "doi")
-doc_table <- table(licensed = papers_doc$licensed, documented = papers_doc$documented)
-print(doc_table)
-print(fisher.test(doc_table))
-
-
-# download models ---------------------------------------------------------
-# doi case can differ in prereg_flags.csv
-download_data$licensed <- download_data$doi %in% papers$doi[papers$licensed]
-download_data$documented <- download_data$doi %in% documentation$doi[documentation$documented %in% TRUE]
-download_data$prereg <- tolower(download_data$doi) %in% tolower(prereg_flags$doi[prereg_flags$prereg %in% TRUE])
-
-print(share_licensed(download_data, prereg))
-download_data |>
-  group_by(licensed) |>
-  summarise(n = n(), median_downloads = median(total_downloads)) |>
-  print()
-
-# adds standardised predictors (z_cit, z_att, z_files) and log downloads
-# (l_total for all files, l_max for the most downloaded file).
-# rhs is the paper's right-hand side: citations, attention, repository size,
-# journal and year
-model_data <- pred_build_dm(download_data)
-model_df <- model_data$dm
-# effect coding for journal as in the paper
-contrasts(model_df$journal) <- contr.sum(nlevels(model_df$journal))
-
-model_formulas <- c(
-  total = "l_total ~ RHS + licensed",
-  total_doc = "l_total ~ RHS + licensed + documented",
-  total_prereg = "l_total ~ RHS + licensed + prereg",
-  total_doc_prereg = "l_total ~ RHS + licensed + documented + prereg",
-  peak = "l_max ~ RHS + licensed",
-  peak_doc_prereg = "l_max ~ RHS + licensed + documented + prereg"
-)
-download_models <- lapply(model_formulas, \(f) {
-  lm(as.formula(sub("RHS", model_data$rhs, f)), data = model_df)
-})
-
-# licensed is 0/1, so exp(b) - 1 is the % difference in downloads
-licensed_effects <- lapply(download_models, \(m) {
-  broom::tidy(m, conf.int = TRUE) |>
-    filter(term == "licensedTRUE") |>
-    mutate(adj_r2 = summary(m)$adj.r.squared)
-}) |>
-  bind_rows(.id = "model") |>
-  mutate(pct = round(100 * (exp(estimate) - 1)),
-         across(c(estimate, conf.low, conf.high, adj_r2), \(x) round(x, 2)),
-         p.value = signif(p.value, 2)) |>
-  select(model, estimate, conf.low, conf.high, pct, p.value, adj_r2)
-print(licensed_effects)
-
-print(round(coef(summary(download_models$total_doc_prereg)), 3))
+by_doc <- share_licensed(papers_doc, documented)
+print(by_doc)
+doc_test <- fisher.test(table(papers_doc$licensed, papers_doc$documented))
+print(doc_test)
 
 
 # figure ------------------------------------------------------------------
-
-
 # journal abbreviations and colours as in the paper's Figure 2b
 journal_abbr <- c("Psychological Science" = "Psych Sci",
                   "Journal of Experimental Social Psychology" = "JESP",
@@ -387,7 +338,7 @@ segment.color = "grey60", segment.size = 0.4,
   scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
   # room on the right for the labels
   scale_x_discrete(expand = expansion(add = c(0.25, 1.5))) +
-  labs(x = "Publication year", y = "Percentage of papers with OSF materials that included a license") +
+  labs(x = "Publication year", y = "% of papers with OSF materials that included a licence") +
   theme_dv("h") +
   theme(axis.line.x = element_blank())
 
@@ -489,9 +440,10 @@ ggsave("figures/plot_licenses_facets.pdf", fig_facets, width = 8, height = 4)
 
 # codebook ----------------------------------------------------------------
 # every column of the csv files in data/ should be in data/codebook.csv, and
-# nothing else
+# nothing else. license_passages.csv is local only and not documented
 codebook <- read.csv("data/codebook.csv")
-data_files <- setdiff(list.files("data", pattern = "\\.csv$"), "codebook.csv")
+data_files <- setdiff(list.files("data", pattern = "\\.csv$"),
+                      c("codebook.csv", "license_passages.csv"))
 for (f in union(data_files, codebook$file)) {
   cols <- if (f %in% data_files) names(read.csv(file.path("data", f), nrows = 1)) else character()
   documented <- codebook$column[codebook$file == f]
