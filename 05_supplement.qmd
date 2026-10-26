@@ -1,6 +1,6 @@
 ---
 title: "Supplement: Licenses of shared OSF materials"
-author: 
+author:
  - name: Björn S. Siepe
    orcid: 0000-0002-9558-4648
    affiliations: University of Marburg
@@ -26,17 +26,30 @@ knitr:
     fig.showtext: true
 ---
 
+# Preparation
+
+We first load all packages and datasets and run the analysis and the manual check:
+
 ```{r}
-#| include: false
+#| output: false
 library(knitr)
 library(dplyr)
+library(pander)
 source("02_analyse_licenses.R")
+
+# 04 reads its own copy of the papers, so it runs in its own environment
+manual_env <- new.env()
+source("04_evaluate_manual_check.R", local = manual_env)
+check <- manual_env$check
 
 # numbers for the method text
 readme_presence <- read.csv(file.path(MAT_DIR, "osf_readme_presence.csv"))
 strata <- read.csv("data/manual_check_strata.csv")
 pairs <- distinct(object_licenses, doi, osf_project)
 n_shared_ids <- sum(table(pairs$osf_project) > 1)
+crawl_dates <- range(object_licenses$checked)
+n_components <- n_distinct(components$component_id[components$depth > 0])
+n_github <- n_distinct(components$component_id[!is.na(components$github_repo)])
 
 # pairs without a row in the deposit's documentation coding, by object type
 doc_llm <- read.csv(file.path(MAT_DIR, "osf_documentation_llm.csv"))
@@ -45,58 +58,122 @@ doc_missing <- distinct(osf_files, doi, osf_project) |>
   left_join(distinct(object_licenses, osf_project, holder_type), by = "osf_project")
 ```
 
-## Method
+# Method
 
-**Objects.** We checked every OSF id in the deposit's `osf_file_downloads.csv`:
-`r n_distinct(pairs$osf_project)` distinct objects, linked as `r nrow(pairs)` paper and
-object pairs by `r n_distinct(pairs$doi)` papers (`r n_shared_ids` ids are linked by two
-papers). A link to a single file is resolved to the project or registration that holds it,
-the same rule as in Quintana's `collect_osf_documentation.R`.
+## Population and objects
 
-**Population.** The `r nrow(papers)` papers in `osf_readme_presence.csv`, which is the paper's
-denominator for documentation: empirical papers sharing on OSF with a readable file
-listing.
+We build on Quintana's deposit (v1.1.0, <https://doi.org/10.5281/zenodo.22805418>) and use
+his corpus, population and documentation coding unchanged. His corpus covers empirical
+papers published in *Cognition*, the *Journal of
+Experimental Social Psychology* (JESP), the *Journal of Memory and Language* (JML) and
+*Psychological Science* in 2015, 2020 and 2025. We use the population of his
+documentation analysis: the `r nrow(papers)` empirical papers that share materials on OSF
+with a readable file listing (`osf_readme_presence.csv`).
 
-**Sources of a license.**
+The deposit's file listing (`osf_file_downloads.csv`) links `r n_distinct(pairs$doi)`
+papers to `r n_distinct(pairs$osf_project)` distinct OSF objects (`r nrow(pairs)` paper and
+object pairs; `r n_shared_ids` objects are linked by two papers). An object can be a
+project, a component, a registration or a single file. Files carry no license, so a link to
+a file is resolved to the project or registration that holds it, the same rule as in
+Quintana's `collect_osf_documentation.R`. The papers of the population link
+`r nrow(linked_objects)` of these objects.
 
-- *OSF license field* of each linked object, mapped to OSF's license names. Components carry their own license, so all components below a linked object are read, at any depth. Copyright-holder names are not stored, only whether one is given.
-- *LICENSE files*: file names containing `license` or `licence`, or starting with `COPYING` or `COPYRIGHT`, in the deposit's file listing. The listing covers components at any depth and add-on storage such as GitHub; for registrations it covers only OSF
-  storage, not components.
-- *GitHub add-ons*: an OSF project can mirror a GitHub repository as storage. We record the
-  license GitHub detects in the repository and count it like a LICENSE file. GitHub's
-  `NOASSERTION` (a license file it cannot match) counts as licensed, like "Other" on OSF.
-- *READMEs and descriptions*: the description of every object and of its direct
-  components, and the README files of the `r sum(readme_presence$has_readme)` papers whose
-  file listing has one (file names matching `readme`, `read me` or `read_me`, as in
-  Quintana's `analyse_osf_readme.R`). The deposit lists file names without ids, so the file
-  tree is walked again, including components at any depth, until all listed READMEs are
-  found. PDF and Word files are converted to text. Every passage containing `licen[sc]`,
-  with 200 characters on each side, is coded by hand (see below).
+## Data collection
 
-**Licensed paper.** A paper is licensed if any linked object or component has a license in
-the OSF field, if there is a LICENSE file or a licensed GitHub add-on, or if a passage is
-coded as stating a license. OSF's "No license" counts as unlicensed, "Other" (a custom
-license) as licensed. We also report results for the OSF license field alone, the only
+We queried the OSF API (v2) for every linked object between `r crawl_dates[1]` and
+`r crawl_dates[2]` (`01_collect_osf_licenses.R`). Licenses are therefore read at the crawl
+date, not at publication. We considered five sources of a license:
+
+1. **OSF license field.** Each project, component and registration has a license field,
+   which OSF shows on the project page. We recorded the license of each linked object and
+   walked all components below it, at any depth (`r n_components` components). We stored
+   only whether a copyright holder is given, not the names.
+2. **LICENSE files.** File names in the deposit's listing that contain `license` or
+   `licence`, or that are `COPYING` or `COPYRIGHT` (alone or followed by a separator). The
+   listing covers components at any depth and add-on storage, but for registrations only
+   OSF storage.
+3. **GitHub add-ons.** An OSF project can connect a GitHub repository as storage. For the
+   `r n_github` nodes with such an add-on, we recorded the license GitHub detects in the
+   repository. GitHub's `NOASSERTION`, a license file it cannot match, counts as a license.
+4. **Descriptions.** The description of every linked object and of its direct components.
+5. **READMEs.** The README files of the `r sum(readme_presence$has_readme)` papers whose
+   file listing has one (names matching `readme`, `read me` or `read_me`, as in Quintana's
+   `analyse_osf_readme.R`). The deposit lists file names without ids, so we walked each
+   file tree again, including components, until all listed READMEs were found. PDF and
+   Word files were converted to text.
+
+Descriptions and READMEs were searched for `licen[sc]`. Each text with a match was coded by
+hand (`r nrow(mentions)` texts, see [Coding schemes](#coding-schemes)). The passages are
+other researchers' text, so we share only the coding and a link to each page.
+
+## Definitions
+
+A paper counts as **licensed** if at least one of its linked objects or their components
+has a license in the OSF field, if there is a LICENSE file or a licensed GitHub add-on, or
+if a description or README is coded as stating a license. On OSF, "No license" is an
+explicit choice and counts as unlicensed; "Other" is a custom license and counts as
+licensed. We also report the OSF license field on its own, as it is the only
 machine-readable source and the one shown on the project page.
 
-**License types.** A paper can have more than one license, e.g. CC BY for data and MIT for
-code. `license_types` in `data/license_by_paper.csv` lists all of them as SPDX ids (OSF
-field, GitHub, coded passages), `osf_license_types` the OSF field only. The type of a
-LICENSE file in the OSF listing is not read.
+A paper can carry several **license types**, e.g. CC BY for data and MIT for code. We map
+all of them to SPDX identifiers (<https://spdx.org/licenses>) and count each type once per
+paper. The type of a LICENSE file is not read.
 
-**Download models.** We add `licensed` to the paper's models of total and peak single-file
-downloads. `02_analyse_licenses.R` loads `pred_prepare_data()` and `pred_build_dm()` from
-Quintana's `analyse_download_predictors.R` instead of copying them, so population,
-predictors and coding are the paper's. Without `licensed` the models reproduce the
-published estimates. Further models add documentation and preregistration as covariates.
+## Analysis
+
+We report the share of licensed papers with exact (Clopper-Pearson) 95% confidence
+intervals, overall, per journal and per period (`02_analyse_licenses.R`). As licenses are
+read at the crawl date, older papers had more time to gain a license, and differences
+between years are hard to interpret. We therefore only compare papers from 2025 with
+earlier papers: *Psychological Science* requires an open license for submissions from 2024.
+2015 has few papers on OSF, so it is pooled with 2020. OSF also asks for a license when a
+registration is created, which raises rates independently of journal policy, so we repeat
+the comparison without registrations. Finally, we compare licensing between papers with and
+without shared code (any code file in the deposit's listing) and between papers with and
+without documentation as coded by Quintana (a README, or substantive reuse guidance in the
+OSF description or wiki), the latter with Fisher's exact test.
+
+## Manual check
+
+To validate the crawl, `03_sample_manual_check.R` drew a stratified sample of
+`r nrow(strata)` papers (`r round(100 * nrow(strata) / nrow(papers))`% of the population).
+Each paper was assigned to one of five strata (@tbl-strata), in the order listed, so a paper
+falls into the first stratum that applies. Cases where the crawl is most likely to err are
+oversampled: the sample includes every paper in the first two strata and 15% of the papers
+linking a registration or a single file. The rest of the sample is split over the last two
+strata in proportion to their size.
+
+```{r}
+#| label: tbl-strata
+#| tbl-cap: "Strata of the manual check, in the order they are assigned, with the number of sampled papers."
+stratum_info <- tibble(
+  stratum = c("child, file or readme only", "no license chosen", "registration or file link",
+              "licensed on OSF", "unlicensed"),
+  definition = c("Licensed, but not in the OSF license field of a linked object",
+                 "Unlicensed, with \"No license\" chosen on OSF",
+                 "Links a registration or a single file",
+                 "Licensed in the OSF license field of a linked object",
+                 "All other papers")
+)
+stratum_info |>
+  left_join(count(strata, stratum, name = "papers"), by = "stratum") |>
+  kable(col.names = c("Stratum", "Definition", "Sampled papers"))
+```
+
+The coding sheet is in random order and does not show our coding or the stratum. Each
+paper was coded by opening its OSF links and looking for a
+license anywhere on the linked pages, including places the crawl does not cover (e.g. the
+wiki). `04_evaluate_manual_check.R` compares this coding with the crawl: agreement and
+Cohen's kappa for the OSF license field, and per stratum how often a license is stated
+elsewhere.
 
 ## Coding schemes
 
 ### License mentions
 
 Each row of `data/license_mentions.csv` is one description or README with at least one
-mention (`r nrow(mentions)` rows). Re-running `01` keeps the coding and leaves new passages
-empty; `02` warns if any are uncoded and counts them as no license.
+match. Re-running `01` keeps the coding and leaves new texts empty; `02` warns if any are
+uncoded and counts them as no license.
 
 | Column | Coding |
 |---|---|
@@ -106,61 +183,166 @@ empty; `02` warns if any are uncoded and counts them as no license.
 
 ### Manual check
 
-`03_sample_manual_check.R` drew `r nrow(strata)` papers, stratified so that error-prone
-cases are covered. It includes every paper licensed only through a child component, a
-LICENSE file or a README. The sheet is in random order and does not show our coding. Each
-paper is coded in `data/manual_check.csv` by opening its OSF links.
-
-```{r}
-strata |>
-  count(stratum, name = "papers") |>
-  knitr::kable()
-```
+Each sampled paper was coded in `data/manual_check.csv` as follows.
 
 | Column | Coding |
 |---|---|
 | `license_osf` | `yes` if a linked project or registration, or one of its direct components, shows a license on its OSF page; else `no`. "No license" counts as `no`. For a link to a single file, check the project or registration holding it. |
-| `license_osf_name` | The license shown, as on OSF or as SPDX id (e.g. `CC-BY-4.0`, `CC0-1.0`, `MIT`). |
-| `license_other` | `yes` if a license is stated anywhere else: a LICENSE or README file, the project description, the wiki, or a deeper component; else `no`. |
-| `license_other_where` | Where: `file`, `readme`, `description`, `wiki` or `component`. |
+| `license_osf_name` | The license in the OSF license field, as SPDX id (e.g. `CC-BY-4.0`, `CC0-1.0`, `MIT`). Empty if `license_osf` is `no`. |
+| `license_other` | `yes` if a license is stated anywhere else: a LICENSE or README file, the project description, the wiki, a deeper component, GitHub, or a page linked from the paper or project; else empty. |
+| `license_other_where` | Where: `file`, `readme`, `description`, `wiki`, `component`, `github` (repository connected as storage) or `link` (repository or page only linked from the paper or the project). |
+| `license_other_name` | The license stated there, as SPDX id (e.g. `MIT`); `unknown` if the type is unclear. |
 | `checked_on` | Date of the check (licenses can change after the crawl). |
 | `notes` | Anything unclear. |
 
-`04_evaluate_manual_check.R` compares this coding with ours: agreement and kappa for the
-OSF license field, and per stratum how often a license is stated somewhere we do not look.
+# Results
 
 ## Licensing rates
 
+Of the `r nrow(papers)` papers, `r sum(papers$licensed)`
+(`r round(100 * mean(papers$licensed))`%) carry a license. @tbl-routes shows where these
+licenses come from. Each licensed paper is counted once, under the first source in the
+list that applies, so the sources add up to the licensed papers.
+
 ```{r}
+#| label: tbl-routes
+#| tbl-cap: "Source of the license, as number and percentage of all papers. Each paper is counted under the first source that applies."
+route_n <- setNames(license_routes$n, license_routes$route)
+tibble(
+  source = c("OSF license field of a linked object",
+             "OSF license field of a component",
+             "LICENSE file",
+             "GitHub add-on",
+             "README",
+             "Description",
+             "**Licensed**",
+             "**Not licensed**",
+             "of which \"No license\" chosen on OSF",
+             "**All papers**"),
+  n = c(route_n[c("osf_object", "child_only", "license_file_only", "github_only",
+                  "readme_only", "description_only")],
+        sum(papers$licensed), sum(!papers$licensed), route_n[["no_license_chosen"]],
+        nrow(papers))
+) |>
+  mutate(pct = sprintf("%.1f", 100 * n / nrow(papers))) |>
+  kable(col.names = c("Source", "Papers", "%"))
+```
+
+Without this order, `r route_n[["any_osf_field"]]` papers have a license in an OSF license
+field (of an object or a component), `r route_n[["any_license_file"]]` a LICENSE file,
+`r route_n[["any_github"]]` a licensed GitHub add-on, `r route_n[["any_readme"]]` a README
+and `r route_n[["any_description"]]` a description that states a license.
+
+@tbl-rates shows the share of licensed papers per journal and period, once for all linked
+objects and once without registrations.
+
+```{r}
+#| label: tbl-rates
+#| tbl-cap: "Licensed papers / all papers, with percentage and 95% CI."
 rates_for_text |>
-  select(objects, journal, period, n, n_licensed, text) |>
-  knitr::kable()
+  mutate(cell = sprintf("%d/%d, %s", n_licensed, n, text),
+         journal = if_else(journal == "all", "All journals", journal),
+         period = if_else(period == "all", "All years", period)) |>
+  select(objects, journal, period, cell) |>
+  tidyr::pivot_wider(names_from = objects, values_from = cell) |>
+  kable(col.names = c("Journal", "Period", "All objects", "Without registrations"))
 ```
 
-```{r}
-knitr::kable(license_routes)
-```
+@fig-main shows the share of licensed papers per journal before and after 2025 (a) and the
+license types used (b). The SPDX identifiers are spelled out in @tbl-types.
 
 ```{r}
+#| label: fig-main
+#| fig-cap: "(a) Share of papers with OSF materials that include a license, per journal and for all journals together (dashed). (b) License types, each counted once per paper. Types used by fewer than five papers are pooled as Other. No license: papers without any license."
+#| fig-width: 8
+#| fig-height: 4.5
+fig
+```
+
+@fig-facets shows the same shares as panel (a) of @fig-main, one journal per panel and with
+95% confidence intervals.
+
+```{r}
+#| label: fig-facets
+#| fig-cap: "Share of licensed papers per journal and period, with exact 95% confidence intervals."
 #| fig-width: 8
 #| fig-height: 4
-#| fig-showtext: true
 fig_facets
+```
+
+@fig-dumbbell shows the change between the two periods as a dumbbell chart, with the number
+of papers per journal and period in brackets. Panel (b) is the same as in @fig-main.
+
+```{r}
+#| label: fig-dumbbell
+#| fig-cap: "(a) Share of licensed papers in 2015 and 2020 (open dot) and in 2025 (filled dot), with the number of papers in brackets. (b) License types, as in @fig-main."
+#| fig-width: 8
+#| fig-height: 4.5
+fig_dumbbell
 ```
 
 ## License types
 
-```{r}
-knitr::kable(select(license_counts, short, license_name, n, pct))
-```
-
-## Downloads
+@tbl-types lists all license types. Percentages refer to all `r sum(license_counts$n)` uses
+of a license type, as a paper can carry more than one.
 
 ```{r}
-knitr::kable(licensed_effects)
+#| label: tbl-types
+#| tbl-cap: "License types, each counted once per paper."
+license_counts |>
+  select(short, license_name, n, pct) |>
+  kable(col.names = c("SPDX id", "Name on OSF", "Papers", "% of uses"))
 ```
 
-## Limitations
+## Code sharing and documentation
+
+@tbl-doc compares licensing between papers with and without shared code, and between papers
+with and without documentation. Documented papers are licensed more often (odds ratio
+`r sprintf("%.1f", doc_test$estimate)`, 95% CI `r sprintf("%.1f", doc_test$conf.int[1])`
+to `r sprintf("%.1f", doc_test$conf.int[2])`, Fisher's exact test).
+
+```{r}
+#| label: tbl-doc
+#| tbl-cap: "Licensed papers by code sharing and documentation, with 95% CI."
+bind_rows(
+  mutate(by_code, group = "Shares code", value = shares_code),
+  mutate(by_doc, group = "Documented", value = documented)
+) |>
+  mutate(value = if_else(value, "yes", "no"),
+         text = sprintf("%d%% [%d, %d]", pct, ci_low, ci_high)) |>
+  select(group, value, n, n_licensed, text) |>
+  kable(col.names = c("", "", "Papers", "Licensed", "% [95% CI]"))
+```
+
+## Manual check
+
+@tbl-agreement compares the OSF license field in the manual check with the crawl. The two
+agree for `r round(100 * mean(check$manual_osf == check$ours_osf))`% of the
+`r nrow(check)` papers (Cohen's kappa
+`r round(psych::cohen.kappa(cbind(check$manual_osf, check$ours_osf))$kappa, 2)`).
+
+```{r}
+#| label: tbl-agreement
+#| tbl-cap: "License in the OSF field, manual check (rows) against crawl (columns)."
+agreement <- table(manual = check$manual_osf, crawl = check$ours_osf)
+kable(as.data.frame.matrix(agreement), row.names = TRUE)
+```
+
+@tbl-strata-results shows per stratum how many papers are licensed by our coding and by the
+manual check, and how many state a license only outside the OSF field.
+
+```{r}
+#| label: tbl-strata-results
+#| tbl-cap: "Licensed papers per stratum, crawl and manual check."
+check |>
+  group_by(stratum) |>
+  summarise(n = n(), licensed_ours = sum(licensed), licensed_manual = sum(manual_any),
+            other_only = sum(manual_other & !manual_osf)) |>
+  kable(col.names = c("Stratum", "Papers", "Licensed (crawl)", "Licensed (manual)",
+                      "Only outside the OSF field"))
+```
+
+# Limitations
 
 - Licenses are read at the crawl date, not at publication; authors can add or change a
   license later.
@@ -176,7 +358,12 @@ knitr::kable(licensed_effects)
   "data: CC0" without that word is missed, as are licenses in the wiki, in files not named
   README, and in scanned PDFs. READMEs are read only for papers whose file listing in the
   deposit has one, and not all listed READMEs could be found for one registration.
-- All associations with downloads are observational.
+  LICENSE files are found by name only. In the manual check, one paper stated a CC0 license
+  inside a text file that links to the registration. We count such a paper as unlicensed,
+  as reusers are unlikely to look for a license there.
+- The comparisons with code sharing and documentation are descriptive. Licensed and
+  documented papers may share causes, such as journal policy or the authors' general
+  practices.
 
 ## A note on the deposit
 
@@ -184,5 +371,13 @@ knitr::kable(licensed_effects)
 in the deposit's `osf_documentation_llm.csv`
 (`r sum(doc_missing$holder_type %in% "registrations")` of them registrations), from
 `r n_distinct(doc_missing$doi)` papers. For these objects, no description or wiki was
-assessed.
-This may be intentional and does not affect the license analysis.
+assessed. This may be intentional and does not affect the license analysis.
+
+# Session info
+
+We print the session info here, and save it to `session_info.txt`.
+
+```{r}
+writeLines(capture.output(sessionInfo()), "session_info.txt")
+pander::pander(sessionInfo())
+```
