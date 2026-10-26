@@ -163,11 +163,14 @@ license_routes <- papers |>
     osf_object = sum(osf_license),
     child_only = sum(!osf_license & child_license),
     license_file_only = sum(!osf_field & license_file),
-    readme_only = sum(!osf_field & !license_file & license_readme),
-    description_only = sum(!osf_field & !license_file & !license_readme & license_description),
+    github_only = sum(!osf_field & !license_file & license_github),
+    readme_only = sum(!osf_field & !license_file & !license_github & license_readme),
+    description_only = sum(!osf_field & !license_file & !license_github & !license_readme &
+license_description),
     no_license_chosen = sum(!licensed & chose_no_lic),
     any_osf_field = sum(osf_field),
     any_license_file = sum(license_file),
+any_github = sum(license_github),
     any_readme = sum(license_readme),
     any_description = sum(license_description)
   ) |>
@@ -175,13 +178,24 @@ license_routes <- papers |>
   mutate(pct = round(100 * n / nrow(papers)))
 print(license_routes)
 
-# license types, counted per OSF object whose license we read (a project and
-# a file in it can both be linked by the same paper)
+# papers with more than one license. "Other" counts as one type
+print(count(filter(papers, licensed), n_license_types))
+papers |>
+  filter(n_license_types > 1) |>
+  count(license_types, sort = TRUE) |>
+  print()
+
+# license types. a paper can have several licenses, each counts once per paper.
+# papers licensed only through a LICENSE file of unknown type do not appear
+spdx_names <- setNames(names(license_abbr), license_abbr)
 license_counts <- object_licenses |>
-  filter(license_set %in% TRUE, doi %in% papers$doi) |>
-  distinct(node_id, license_name) |>
-  count(license_name, sort = TRUE) |>
-  mutate(pct = round(100 * n / sum(n)))
+  filter(doi %in% papers$doi) |>
+  distinct(doi, node_id) |>
+  inner_join(type_list, by = "node_id", relationship = "many-to-many") |>
+  distinct(doi, short = license) |>
+  count(short, sort = TRUE) |>
+  mutate(license_name = coalesce(unname(spdx_names[short]), short),
+pct = round(100 * n / sum(n)))
 print(license_counts)
 
 
