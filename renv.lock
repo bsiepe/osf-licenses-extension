@@ -9,6 +9,32 @@
     ]
   },
   "Packages": {
+    "GPArotation": {
+      "Package": "GPArotation",
+      "Version": "2026.8-2",
+      "Source": "Repository",
+      "Title": "Gradient Projection Factor Rotation",
+      "Authors@R": "c( person(\"Coen\", \"Bernaards\", email = \"cab.gparotation@gmail.com\", role = c(\"aut\", \"cre\")), person(\"Paul\", \"Gilbert\", role = \"aut\"), person(\"Robert\", \"Jennrich\", role = \"aut\") )",
+      "Depends": [
+        "R (>= 3.5.0)"
+      ],
+      "Description": "Gradient projection algorithms for orthogonal and oblique rotation of factor loadings matrices in factor analysis. Implements a comprehensive set of rotation criteria including quartimax, quartimin, oblimin, geomin, simplimax, the Crawford-Ferguson family, and target rotation, among others.  Supports multiple random starts. For details see Bernaards and Jennrich (2005) <doi:10.1177/0013164404272507>.",
+      "License": "GPL (>= 2)",
+      "URL": "https://cran.r-project.org/package=GPArotation",
+      "Imports": [
+        "stats",
+        "grDevices",
+        "graphics",
+        "utils"
+      ],
+      "VignetteBuilder": "utils",
+      "LazyData": "yes",
+      "NeedsCompilation": "no",
+      "Author": "Coen Bernaards [aut, cre], Paul Gilbert [aut], Robert Jennrich [aut]",
+      "Maintainer": "Coen Bernaards <cab.gparotation@gmail.com>",
+      "Repository": "CRAN",
+      "Encoding": "UTF-8"
+    },
     "KernSmooth": {
       "Package": "KernSmooth",
       "Version": "2.23-26",
@@ -1031,7 +1057,12 @@
       "Package": "forcats",
       "Version": "1.0.1",
       "Source": "Repository",
-      "Priority": null,
+      "Title": "Tools for Working with Categorical Variables (Factors)",
+      "Authors@R": "c( person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = c(\"aut\", \"cre\")), person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"), comment = c(ROR = \"03wc8by49\")) )",
+      "Description": "Helpers for reordering factor levels (including moving specified levels to front, ordering by first appearance, reversing, and randomly shuffling), and tools for modifying factor levels (including collapsing rare levels into other, 'anonymising', and manually 'recoding').",
+      "License": "MIT + file LICENSE",
+      "URL": "https://forcats.tidyverse.org/, https://github.com/tidyverse/forcats",
+      "BugReports": "https://github.com/tidyverse/forcats/issues",
       "Depends": [
         "R (>= 4.1)"
       ],
@@ -1043,9 +1074,6 @@
         "rlang (>= 1.0.0)",
         "tibble"
       ],
-      "LinkingTo": [
-        null
-      ],
       "Suggests": [
         "covr",
         "dplyr",
@@ -1056,16 +1084,16 @@
         "testthat (>= 3.0.0)",
         "withr"
       ],
-      "Enhances": [
-        null
-      ],
-      "License": "MIT + file LICENSE",
-      "License_is_FOSS": null,
-      "License_restricts_use": null,
-      "OS_type": null,
+      "VignetteBuilder": "knitr",
+      "Config/Needs/website": "tidyverse/tidytemplate",
+      "Config/testthat/edition": "3",
+      "Encoding": "UTF-8",
+      "LazyData": "true",
+      "RoxygenNote": "7.3.3",
       "NeedsCompilation": "no",
-      "Repository": "CRAN",
-      "Type": "source"
+      "Author": "Hadley Wickham [aut, cre], Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
+      "Maintainer": "Hadley Wickham <hadley@posit.co>",
+      "Repository": "CRAN"
     },
     "foreign": {
       "Package": "foreign",
@@ -1924,6 +1952,25 @@
       "Maintainer": "Yihui Xie <xie@yihui.name>",
       "Repository": "CRAN"
     },
+    "mnormt": {
+      "Package": "mnormt",
+      "Version": "2.1.2",
+      "Source": "Repository",
+      "Date": "2026-01-25",
+      "Title": "The Multivariate Normal and t Distributions, and Their Truncated Versions",
+      "Authors@R": "c(person(given = \"Adelchi\", family = \"Azzalini\", role = c(\"aut\", \"cre\"), email = \"adelchi.azzalini@unipd.it\"), person(given = \"Alan\", family = \"Genz\", role = \"aut\", comment = \"most Fortran code\"), person(given = \"Alan\", family = \"Miller\", role = \"ctb\", comment = \"Fortran routine PHI\"), person(given = c(\"Michael\", \"J.\"), family = \"Wichura\", role = \"ctb\", comment = \"Fortran routine PHINV\"), person(given = c(\"G.\", \"W.\"), family = \"Hill\", role = \"ctb\", comment = \"Fortran routine STDINV\"), person(given = \"Yihong\", family = \"Ge.\", role = \"ctb\", comment = \"Fortran routines BNVU and MVBVU\"))",
+      "Maintainer": "Adelchi Azzalini <adelchi.azzalini@unipd.it>",
+      "Depends": [
+        "R (>= 3.0.0)"
+      ],
+      "Description": "Functions are provided for computing the density and the distribution function of multi-dimensional normal and \"t\" random variables, possibly truncated (on one side or two sides),  and for generating random  vectors sampled from these distributions, except sampling from the truncated \"t\". Moments of arbitrary order of a multivariate truncated normal are computed, and converted to cumulants up to order 4.  Probabilities are computed via non-Monte Carlo methods; different routines  are used in the case d=1, d=2, d=3, d>3, if d denotes the dimensionality.",
+      "License": "GPL-2 | GPL-3",
+      "URL": "http://azzalini.stat.unipd.it/SW/Pkg-mnormt/",
+      "NeedsCompilation": "yes",
+      "Encoding": "UTF-8",
+      "Author": "Adelchi Azzalini [aut, cre], Alan Genz [aut] (most Fortran code), Alan Miller [ctb] (Fortran routine PHI), Michael J. Wichura [ctb] (Fortran routine PHINV), G. W. Hill [ctb] (Fortran routine STDINV), Yihong Ge. [ctb] (Fortran routines BNVU and MVBVU)",
+      "Repository": "CRAN"
+    },
     "nlme": {
       "Package": "nlme",
       "Version": "3.1-169",
@@ -2014,6 +2061,69 @@
       "NeedsCompilation": "yes",
       "Author": "Jeroen Ooms [aut, cre] (ORCID: <https://orcid.org/0000-0002-4035-0289>), Oliver Keyes [ctb]",
       "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
+      "Repository": "CRAN"
+    },
+    "pander": {
+      "Package": "pander",
+      "Version": "0.6.6",
+      "Source": "Repository",
+      "Authors@R": "c( person(\"Gergely\", \"Daróczi\", , \"daroczig@rapporter.net\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0003-3149-8537\")), person(\"Roman\", \"Tsegelskyi\", , \"roman.tsegelskyi@gmail.com\", role = c(\"aut\")))",
+      "Title": "An R 'Pandoc' Writer",
+      "Type": "Package",
+      "Encoding": "UTF-8",
+      "Description": "Contains some functions catching all messages, 'stdout' and other useful information while evaluating R code and other helpers to return user specified text elements (like: header, paragraph, table, image, lists etc.) in 'pandoc' markdown or several type of R objects similarly automatically transformed to markdown format. Also capable of exporting/converting (the resulting) complex 'pandoc' documents to e.g. HTML, 'PDF', 'docx' or 'odt'. This latter reporting feature is supported in brew syntax or with a custom reference class with a smarty caching 'backend'.",
+      "Date": "2025-03-01",
+      "URL": "https://rapporter.github.io/pander/",
+      "BugReports": "https://github.com/rapporter/pander/issues",
+      "License": "AGPL-3 | file LICENSE",
+      "Depends": [
+        "R (>= 2.15.0)"
+      ],
+      "Imports": [
+        "grDevices",
+        "graphics",
+        "methods",
+        "utils",
+        "stats",
+        "digest",
+        "tools",
+        "Rcpp"
+      ],
+      "Suggests": [
+        "grid",
+        "lattice",
+        "ggplot2 (>= 0.9.2)",
+        "sylly",
+        "sylly.en",
+        "logger",
+        "survival",
+        "microbenchmark",
+        "zoo",
+        "nlme",
+        "descr",
+        "MASS",
+        "knitr",
+        "rmarkdown",
+        "tables",
+        "reshape",
+        "memisc",
+        "Epi",
+        "randomForest",
+        "tseries",
+        "gtable",
+        "rms",
+        "forecast",
+        "data.table"
+      ],
+      "SystemRequirements": "pandoc (https://johnmacfarlane.net/pandoc) for exporting markdown files to other formats.",
+      "LinkingTo": [
+        "Rcpp"
+      ],
+      "VignetteBuilder": "knitr",
+      "RoxygenNote": "7.3.2",
+      "NeedsCompilation": "yes",
+      "Author": "Gergely Daróczi [aut, cre] (<https://orcid.org/0000-0003-3149-8537>), Roman Tsegelskyi [aut]",
+      "Maintainer": "Gergely Daróczi <daroczig@rapporter.net>",
       "Repository": "CRAN"
     },
     "patchwork": {
@@ -2172,6 +2282,45 @@
       "Encoding": "UTF-8",
       "NeedsCompilation": "no",
       "Repository": "CRAN"
+    },
+    "psych": {
+      "Package": "psych",
+      "Version": "2.6.9",
+      "Source": "Repository",
+      "Date": "2026-09-22",
+      "Title": "Procedures for Psychological, Psychometric, and Personality Research",
+      "Authors@R": "person(\"William\", \"Revelle\", role =c(\"aut\",\"cre\"), email=\"revelle@northwestern.edu\", comment=c(ORCID  = \"0000-0003-4880-9610\") )",
+      "Description": "A general purpose toolbox developed originally for personality, psychometric theory and experimental psychology.  Functions are primarily for multivariate analysis and scale construction using factor analysis, principal component analysis, cluster analysis and reliability analysis, although others provide basic descriptive statistics. Item Response Theory is done using  factor analysis of tetrachoric and polychoric correlations. Functions for analyzing data at multiple levels include within and between group statistics, including correlations and factor analysis.  Validation and cross validation of scales developed using basic machine learning algorithms are provided, as are functions for simulating and testing particular item and test structures. Several functions  serve as a useful front end for structural equation modeling.  Graphical displays of path diagrams, including mediation models, factor analysis and structural equation models are created using basic graphics. Some of the functions are written to support a book on psychometric theory as well as publications in personality research. For more information, see the <https://personality-project.org/r/> web page.",
+      "License": "GPL (>= 2)",
+      "Imports": [
+        "mnormt",
+        "parallel",
+        "stats",
+        "graphics",
+        "grDevices",
+        "methods",
+        "lattice",
+        "nlme",
+        "GPArotation"
+      ],
+      "Suggests": [
+        "psychTools",
+        "lavaan",
+        "lme4",
+        "Rcsdp",
+        "graph",
+        "knitr",
+        "Rgraphviz"
+      ],
+      "LazyData": "yes",
+      "ByteCompile": "true",
+      "VignetteBuilder": "knitr",
+      "URL": "https://personality-project.org/r/psych/ https://personality-project.org/r/psych-manual.pdf",
+      "NeedsCompilation": "no",
+      "Author": "William Revelle [aut, cre] (ORCID: <https://orcid.org/0000-0003-4880-9610>)",
+      "Maintainer": "William Revelle <revelle@northwestern.edu>",
+      "Repository": "CRAN",
+      "Encoding": "UTF-8"
     },
     "purrr": {
       "Package": "purrr",

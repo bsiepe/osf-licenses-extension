@@ -29,7 +29,7 @@ The method, coding schemes, results and limitations are described in
 
 - `osf_licenses.csv`: one row per paper and linked OSF object, with the object's OSF license (crawl snapshot)
 - `osf_components.csv`: one row per node below each object (the object itself at depth 0), with license, storage and GitHub add-on
-- `license_mentions.csv`: one row per README or description that mentions a license, coded by hand
+- `license_mentions.csv`: one row per README or description that mentions a license, with a link to it and our hand coding
 - `license_by_paper.csv`: one row per paper, whether and through which source it is licensed
 - `manual_check.csv`, `manual_check_strata.csv`: one row per paper in the manual check sample
 - `*.rds`: caches of the crawl, used by `01` only
@@ -89,5 +89,3 @@ sourcing it to keep the snapshot.
 
 Code is licensed under MIT ([LICENSE](LICENSE)). Data, figures and the text of the
 supplement are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-`data/license_mentions.csv` quotes short passages from other researchers' OSF pages, which
-are not covered by this license.
