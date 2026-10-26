@@ -1,7 +1,7 @@
 # Licenses of shared OSF materials in psychology
 
 This repository contains code and data for the project: 
-> TODO ADD FINAL TITLE
+> Siepe, B.S., Heck, D.W., Quintana, D. S. *Open research materials need explicit reuse licences*. 
 
 It extends a previous analysis by Quintana:
 
@@ -20,7 +20,7 @@ The method, coding schemes, results and limitations are described in
 | --- | --- |
 | `00_get_materials.R` | Downloads Quintana's materials (v1.1.0) from Zenodo into `materials/` |
 | `01_collect_osf_licenses.R` | Crawls OSF and GitHub for licenses, LICENSE files, READMEs and descriptions |
-| `02_analyse_licenses.R` | Main analysis: license rates and types, journals, documentation, download models, figures |
+| `02_analyse_licenses.R` | Main analysis: license rates and types, journals, documentation, figures |
 | `03_sample_manual_check.R` | Draws the sample for the manual check (run once) |
 | `04_evaluate_manual_check.R` | Compares the manual check with the crawled licenses |
 | `05_supplement.qmd` | Supplement: method, coding schemes, results tables |
@@ -35,9 +35,11 @@ The method, coding schemes, results and limitations are described in
 - `*.rds`: caches of the crawl, used by `01` only
 
 [`data/codebook.csv`](data/codebook.csv) describes every column. Files join on `doi` (paper)
-and `node_id` (OSF object). In its `source` column, `deposit` means Quintana's materials,
-`OSF API` and `GitHub API` mean the value as the API returned it, and `01`, `02`, `03` the
-script that computed it.
+and `node_id` (OSF object); for descriptions, `license_mentions.csv` joins
+`osf_components.csv` on `text_id` = `component_id`, and `manual_check_strata.csv` joins the sheet on `id`. In the `source` column,
+`deposit` means Quintana's materials, `OSF API` and `GitHub API` the value as the API
+returned it, `01`, `02`, `03` the script that computed it, and `hand coding` and
+`manual check` our own coding.
 
 ### `figures/`
 
@@ -55,26 +57,28 @@ There are two ways to run it, both from the repository root.
 make docker
 ```
 
-This builds an image with R 4.6.1 and the package versions in `renv.lock`, and runs
-`00`, `02` and `04` inside it. The outputs are written to `data/` and `figures/`.
+This builds an image with R 4.6.1, the package versions in `renv.lock` and Quarto 1.7.34.
+Inside it, it downloads Quintana's materials and renders the supplement,
+`05_supplement.html`. Rendering runs `02` and `04`, so `data/` and `figures/` are
+updated as well.
 
-### Option 2: local R
+### Option 2: local R and Quarto
 
-With R 4.6.1, start R in the repository root (this activates renv) and run:
+With R 4.6.1 and Quarto, start R in the repository root (this activates renv) and run:
 
 ```r
 renv::restore()
 source("00_get_materials.R")
-source("02_analyse_licenses.R")
-source("04_evaluate_manual_check.R")
 ```
 
-If make is installed, `make` runs the three scripts instead.
+Then render the supplement from the terminal:
 
-### Supplement
+```sh
+quarto render 05_supplement.qmd
+```
 
-`quarto render 05_supplement.qmd` renders the supplement. It needs Quarto, which is not in
-the Docker image, and the packages from option 2.
+If make is installed, `make` downloads the materials and renders the supplement after
+`renv::restore()`. `make analysis` and `make manual` run only the scripts.
 
 ### New crawl
 
