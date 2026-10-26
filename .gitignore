@@ -4,8 +4,12 @@ materials/
 # osf api cache from 01_collect_osf_licenses.R
 *_cache*.rds
 
+# passages quoted from other researchers' READMEs and descriptions, not ours to share
+license_passages.csv
+
 # r and rstudio
 .Rproj.user/
 .Rhistory
 .RData
 .Ruserdata
+.Rproj
