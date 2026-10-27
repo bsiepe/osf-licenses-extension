@@ -15,7 +15,7 @@ library(psych)
 # load data ---------------------------------------------------------------
 manual <- read.csv("data/manual_check.csv")
 strata <- read.csv("data/manual_check_strata.csv")
-papers <- read.csv("data/license_by_paper.csv")
+license_by_paper <- read.csv("data/license_by_paper.csv")
 
 coded <- filter(manual, tolower(trimws(license_osf)) %in% c("yes", "no"))
 message(nrow(coded), " of ", nrow(manual), " papers coded")
@@ -24,7 +24,7 @@ if (nrow(coded) == 0) stop("no papers coded yet")
 # inner joins, both files cover all papers of the sample
 check <- coded |>
   inner_join(strata, by = c("id", "doi")) |>
-  inner_join(select(papers, doi, osf_license, child_license, license_file,
+  inner_join(select(license_by_paper, doi, osf_license, child_license, license_file,
                     licensed, osf_license_types, license_types), by = "doi") |>
   mutate(manual_osf = tolower(trimws(license_osf)) == "yes",
          manual_other = tolower(trimws(license_other)) %in% "yes",
