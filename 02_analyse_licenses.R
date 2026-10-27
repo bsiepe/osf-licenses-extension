@@ -441,9 +441,8 @@ types_plot <- license_counts |>
   mutate(short = as.character(short)) |>
   bind_rows(tibble(short = "No license", n = sum(!papers$licensed))) |>
   mutate(none = short == "No license",
-         # largest type on top, other and no license at the bottom
-         short = forcats::fct_reorder(short, n),
-         short = forcats::fct_relevel(short, "No license", "Other"))
+         # largest type on top
+         short = forcats::fct_reorder(short, n))
 print(types_plot)
 
 plot_types <- ggplot(types_plot, aes(n, short, fill = none)) +
