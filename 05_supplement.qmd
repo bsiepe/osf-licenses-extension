@@ -1,5 +1,5 @@
 ---
-title: "Supplement: Licenses of shared OSF materials"
+title: "Supplement for: Open research materials need explicit reuse licenses"
 author:
  - name: Björn S. Siepe
    orcid: 0000-0002-9558-4648
@@ -36,15 +36,11 @@ library(knitr)
 library(dplyr)
 library(pander)
 source("02_analyse_licenses.R")
-
-# 04 reads its own copy of the papers, so it runs in its own environment
-manual_env <- new.env()
-source("04_evaluate_manual_check.R", local = manual_env)
-check <- manual_env$check
+# also reads the strata of the manual check (strata)
+source("04_evaluate_manual_check.R")
 
 # numbers for the method text
 readme_presence <- read.csv(file.path(MAT_DIR, "osf_readme_presence.csv"))
-strata <- read.csv("data/manual_check_strata.csv")
 pairs <- distinct(object_licenses, doi, osf_project)
 n_shared_ids <- sum(table(pairs$osf_project) > 1)
 crawl_dates <- range(object_licenses$checked)
@@ -62,15 +58,11 @@ doc_missing <- distinct(osf_files, doi, osf_project) |>
 
 ## Population and objects
 
-We build on Quintana's deposit (v1.1.0, <https://doi.org/10.5281/zenodo.22805418>) and use
-his corpus, population and documentation coding unchanged. His corpus covers empirical
-papers published in *Cognition*, the *Journal of
-Experimental Social Psychology* (JESP), the *Journal of Memory and Language* (JML) and
-*Psychological Science* in 2015, 2020 and 2025. We use the population of his
-documentation analysis: the `r nrow(papers)` empirical papers that share materials on OSF
-with a readable file listing (`osf_readme_presence.csv`).
+We build on the results by Quintana (v1.1.0, <https://doi.org/10.5281/zenodo.22805418>) and use
+his list of and associated documentation unchanged. His results cover empirical
+papers published in *Cognition*, the *Journal of Experimental Social Psychology* (JESP), the *Journal of Memory and Language* (JML) and *Psychological Science* in 2015, 2020 and 2025. We use `r nrow(papers)` empirical papers in his sample that share materials on OSF with a readable file listing (`osf_readme_presence.csv`).
 
-The deposit's file listing (`osf_file_downloads.csv`) links `r n_distinct(pairs$doi)`
+The repo's file listing (`osf_file_downloads.csv`) links `r n_distinct(pairs$doi)`
 papers to `r n_distinct(pairs$osf_project)` distinct OSF objects (`r nrow(pairs)` paper and
 object pairs; `r n_shared_ids` objects are linked by two papers). An object can be a
 project, a component, a registration or a single file. Files carry no license, so a link to
@@ -80,13 +72,13 @@ Quintana's `collect_osf_documentation.R`. The papers of the population link
 
 ## Data collection
 
-We queried the OSF API (v2) for every linked object between `r crawl_dates[1]` and
+We queried the OSF API for every linked object between `r crawl_dates[1]` and
 `r crawl_dates[2]` (`01_collect_osf_licenses.R`). Licenses are therefore read at the crawl
 date, not at publication. We considered five sources of a license:
 
 1. **OSF license field.** Each project, component and registration has a license field,
    which OSF shows on the project page. We recorded the license of each linked object and
-   walked all components below it, at any depth (`r n_components` components). We stored
+   investigated all components nested in it, at any depth (`r n_components` components). We stored
    only whether a copyright holder is given, not the names.
 2. **LICENSE files.** File names in the deposit's listing that contain `license` or
    `licence`, or that are `COPYING` or `COPYRIGHT` (alone or followed by a separator). The
@@ -115,19 +107,17 @@ explicit choice and counts as unlicensed; "Other" is a custom license and counts
 licensed. We also report the OSF license field on its own, as it is the only
 machine-readable source and the one shown on the project page.
 
-A paper can carry several **license types**, e.g. CC BY for data and MIT for code. We map
-all of them to SPDX identifiers (<https://spdx.org/licenses>) and count each type once per
-paper. The type of a LICENSE file is not read.
+A paper can carry several **license types**, e.g. CC BY for data and MIT for code. We name
+them according to SPDX identifiers (<https://spdx.org/licenses>) and count each type once per
+paper. 
 
 ## Analysis
 
 We report the share of licensed papers with exact (Clopper-Pearson) 95% confidence
 intervals, overall, per journal and per period (`02_analyse_licenses.R`). As licenses are
-read at the crawl date, older papers had more time to gain a license, and differences
-between years are hard to interpret. We therefore only compare papers from 2025 with
-earlier papers: *Psychological Science* requires an open license for submissions from 2024.
-2015 has few papers on OSF, so it is pooled with 2020. OSF also asks for a license when a
-registration is created, which raises rates independently of journal policy, so we repeat
+read at the crawl date, older papers had more time to gain a license. 
+
+We therefore only compare papers from 2025 with earlier papers: *Psychological Science* requires an open license for submissions from 2024. 2015 has few papers on OSF, so it is pooled with 2020. OSF also asks for a license when a registration is created, which raises rates independently of journal policy, so we repeat
 the comparison without registrations. Finally, we compare licensing between papers with and
 without shared code (any code file in the deposit's listing) and between papers with and
 without documentation as coded by Quintana (a README, or substantive reuse guidance in the
@@ -161,10 +151,7 @@ stratum_info |>
 ```
 
 The coding sheet is in random order and does not show our coding or the stratum. Each
-paper was coded by opening its OSF links and looking for a
-license anywhere on the linked pages, including places the crawl does not cover (e.g. the
-wiki). `04_evaluate_manual_check.R` compares this coding with the crawl: agreement and
-Cohen's kappa for the OSF license field, and per stratum how often a license is stated
+paper was coded by opening its OSF links and looking for a license anywhere on the linked pages, including places the crawl does not cover (e.g. the wiki). `04_evaluate_manual_check.R` compares this coding with the crawl: agreement and Cohen's kappa for the OSF license field, and per stratum how often a license is stated
 elsewhere.
 
 ## Coding schemes
@@ -228,7 +215,7 @@ tibble(
   kable(col.names = c("Source", "Papers", "%"))
 ```
 
-Without this order, `r route_n[["any_osf_field"]]` papers have a license in an OSF license
+`r route_n[["any_osf_field"]]` papers have a license in an OSF license
 field (of an object or a component), `r route_n[["any_license_file"]]` a LICENSE file,
 `r route_n[["any_github"]]` a licensed GitHub add-on, `r route_n[["any_readme"]]` a README
 and `r route_n[["any_description"]]` a description that states a license.
@@ -342,6 +329,8 @@ check |>
                       "Only outside the OSF field"))
 ```
 
+During our manual check, we found one paper that states a license inside a text file that links to its registration. We only looked at this file by accident, and reusers are unlikely to look for a license there. We therefore count this paper as unlicensed.
+
 # Limitations
 
 - Licenses are read at the crawl date, not at publication; authors can add or change a
@@ -352,6 +341,9 @@ check |>
 - GitHub repositories linked in the paper or the OSF description, rather than connected as
   storage, are not checked. Many of them are third-party tools (e.g. PsychoPy) whose
   license says nothing about the shared materials.
+- Some licenses were only stated in a subcomponent of the full project, leaving other parts of a
+  project unlicensed. We count such papers as licensed, but reusers may not find the license
+  for the part they want to use.
 - Papers linking private projects through view-only links are not covered: the keys are
   redacted in the deposit, and those papers are outside the population.
 - READMEs and descriptions are only searched for "license" or "licence". A statement like
@@ -364,14 +356,6 @@ check |>
 - The comparisons with code sharing and documentation are descriptive. Licensed and
   documented papers may share causes, such as journal policy or the authors' general
   practices.
-
-## A note on the deposit
-
-`r nrow(doc_missing)` of the paper and object pairs in `osf_file_downloads.csv` have no row
-in the deposit's `osf_documentation_llm.csv`
-(`r sum(doc_missing$holder_type %in% "registrations")` of them registrations), from
-`r n_distinct(doc_missing$doi)` papers. For these objects, no description or wiki was
-assessed. This may be intentional and does not affect the license analysis.
 
 # Session info
 
