@@ -10,7 +10,9 @@ It extends a previous analysis by Quintana:
 
 
 The method, coding schemes, results and limitations are described in
-[`05_supplement.qmd`](05_supplement.qmd).
+[`05_supplement.qmd`](05_supplement.qmd). 
+
+If you want to re-run our analyses, see [Reproducibility](#reproducibility).
 
 # Overview
 
@@ -88,7 +90,7 @@ re-run our crawl, analysis, and manual re-code.
 
 This is not needed to reproduce the results. `01_collect_osf_licenses.R` queries OSF and
 GitHub again, which takes a few hours and needs an OSF token stored with
-`keyring::key_set("OSF", "OSF_PAT")`. Licenses on OSF change, so a new crawl will not match
+`keyring::key_set("OSF", "OSF_PAT")`. Licenses on OSF change, so a new crawl might not match
 the snapshot. By default `01` overwrites the files in `data/` (as does `make crawl`), keeping
 the hand coding of passages it finds again. Set `OUT_DIR <- "data/new_crawl"` before
 sourcing it to keep the snapshot.
