@@ -158,7 +158,7 @@ type_list <- bind_rows(types_osf, types_components, types_github, types_text) |>
   distinct()
 
 # inner join, papers without any license have no row in type_list.
-# many-to-many on purpose: an object can have several licenses, and a few
+# many-to-many join: an object can have several licenses, and a few
 # objects are linked by two papers, both of which get the object's licenses
 paper_types <- object_licenses |>
   distinct(doi, node_id) |>
@@ -197,7 +197,7 @@ papers <- population |>
 write.csv(papers, "data/license_by_paper.csv", row.names = FALSE)
 
 
-# how many papers and objects are licensed --------------------------------
+# How many papers and objects are licensed --------------------------------
 # objects are the distinct OSF ids linked by the 672 papers (936 of the 939,
 # the other 3 belong to the non-empirical papers)
 linked_objects <- object_licenses |>
@@ -254,18 +254,6 @@ license_counts <- object_licenses |>
   mutate(license_name = coalesce(unname(spdx_names[short]), short),
          pct = round(100 * n / sum(n)))
 print(license_counts)
-
-
-# year and journal --------------------------------------------------------
-# licenses are read at the crawl date, so older papers had more time to get one
-# and trends over years are hard to interpret. we only compare before and after
-# Psychological Science's open license requirement (submissions from 2024).
-# 2015 has only 45 papers (42 in Psych Sci), so it is pooled with 2020
-papers$period <- if_else(papers$year == 2025, "2025", "2015 & 2020")
-
-print(share_licensed(papers, journal, year), n = Inf)
-by_period <- share_licensed(papers, journal, period)
-print(by_period)
 
 
 # registrations -----------------------------------------------------------
