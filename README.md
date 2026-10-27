@@ -80,6 +80,10 @@ quarto render 05_supplement.qmd
 If make is installed, `make` downloads the materials and renders the supplement after
 `renv::restore()`. `make analysis` and `make manual` run only the scripts.
 
+Alternatively, you can also re-run the other scripts mentioned above with `source()` to 
+re-run our crawl, analysis, and manual re-code.
+
+
 ### New crawl
 
 This is not needed to reproduce the results. `01_collect_osf_licenses.R` queries OSF and
