@@ -2,7 +2,7 @@
 # Collect licenses of linked OSF objects
 #
 # Reads the OSF license of every OSF object that a paper in the original deposit
-# links (osf_file_downloads.csv) and writes data/osf_licenses.csv.
+# links (osf_file_downloads.csv).
 # Files have no license, so for a file link we use the project or registration
 # holding the file. Components can have their own license, so all components
 # below a linked object are read as well (data/osf_components.csv), with the
@@ -12,15 +12,16 @@
 # too. Texts with "license" or "licence" go to data/license_mentions.csv and are
 # coded by hand (rules in the supplement); the coding is kept on a re-run. The
 # passages themselves are other researchers' text, so they go to
-# data/license_passages.csv, which is not shared (see .gitignore).
+# data/license_passages.csv, which is not shared.
 # Needs an OSF token, stored with keyring::key_set("OSF", "OSF_PAT") or set as
 # the environment variable OSF_PAT.
-# A full run takes a few hours, as OSF rate-limits the readme walks and
-# downloads. Results are cached in data/osf_license_cache.rds and
-# data/osf_component_cache.rds, so an interrupted run continues where it
-# stopped; delete the caches to start over.
-# For a test run, set e.g. N_TEST <- 20 before sourcing. To crawl without
-# touching data/, set e.g. OUT_DIR <- "data/new_crawl".
+#
+# Terms used below:
+# - linked id (osf_project): the OSF id a paper links to. a project, component,
+#   registration or file
+# - object (node_id): the project or registration whose license we read. the
+#   linked id itself, or for a file the node holding it
+# - component: any node below an object, at any depth
 #------------------------------------------------------------------------------#
 
 
@@ -56,7 +57,7 @@ osf_pat <- Sys.getenv("OSF_PAT")
 if (!nzchar(osf_pat)) osf_pat <- keyring::key_get("OSF", "OSF_PAT")
 
 
-# helpers -----------------------------------------------------------------
+# osf api -----------------------------------------------------------------
 # rate limits and server errors are retried. if they persist we throw an error,
 # and the object is tried again on the next run.
 # other errors (private or deleted objects) are returned and recorded.
@@ -76,14 +77,6 @@ osf_get <- function(url, ...) {
     req_perform()
 }
 
-# needs a project or registration requested with embed = "license"
-# NA if the authors never chose a license
-license_name <- function(d) d$embeds$license$data$attributes$name %||% NA_character_
-
-# "No license" is an explicit option on OSF and counts as unlicensed.
-# "Other" means a custom license and counts as licensed
-is_licensed <- function(name) !is.na(name) & name != "No license"
-
 # all items of a listing, following the next links
 osf_list <- function(url) {
   resp <- osf_get(url, "page[size]" = 100)
@@ -98,6 +91,21 @@ osf_list <- function(url) {
   items
 }
 
+node_url <- function(type, id) paste0(API, type, "/", id, "/")
+
+# link to the contents of a storage or folder
+files_url <- function(x) x$relationships$files$links$related$href
+
+# needs a project or registration requested with embed = "license".
+# NA if the authors never chose a license
+license_name <- function(d) d$embeds$license$data$attributes$name %||% NA_character_
+
+# "No license" is an explicit option on OSF and counts as unlicensed.
+# "Other" means a custom license and counts as licensed
+is_licensed <- function(name) !is.na(name) & name != "No license"
+
+
+# readmes -----------------------------------------------------------------
 readme_entry <- function(f) {
   tibble(text_id = f$id,
          file = f$attributes$name,
@@ -105,12 +113,35 @@ readme_entry <- function(f) {
          download = f$links$download %||% NA_character_)
 }
 
-# readme files of a project or registration. the deposit's file listing has
-# names but no ids, so we walk the file tree: folders first, then components
-# at any depth (the deposit's listing includes them). stops once as many
-# readme files are found as the deposit lists
+# items of the queue in find_readmes()
+node_item <- function(type, id) list(kind = "node", type = type, id = id)
+folder_item <- function(provider, url) list(kind = "folder", provider = provider, url = url)
+
+# storages and components of a node, as new queue items
+open_node <- function(item) {
+  url <- node_url(item$type, item$id)
+  storages <- lapply(osf_list(paste0(url, "files/")),
+                     \(p) folder_item(p$attributes$provider, files_url(p)))
+  components <- lapply(osf_list(paste0(url, "children/")),
+                       \(k) node_item(k$type, k$id))
+  c(storages, components)
+}
+
+# add-on storage (github, dropbox, ...) often fails, then we get NULL.
+# a failure in osfstorage is thrown, so the object is retried
+list_folder <- function(item) {
+  tryCatch(osf_list(item$url), error = function(e) {
+    if (item$provider == "osfstorage") stop(e)
+    NULL
+  })
+}
+
+# readme files of an object. the deposit's file listing has names but no ids,
+# so we walk the file tree, breadth first through folders and components.
+# stops once as many readmes are found as the deposit lists, or after
+# MAX_LISTINGS listings
 find_readmes <- function(type, id, n_expected) {
-  queue <- list(list(kind = "node", type = type, id = id))
+  queue <- list(node_item(type, id))
   found <- list()
   n_listings <- 0
   n_skipped <- 0
@@ -121,40 +152,24 @@ find_readmes <- function(type, id, n_expected) {
     n_listings <- n_listings + 1
 
     if (item$kind == "node") {
-      node_url <- paste0(API, item$type, "/", item$id, "/")
-      for (p in osf_list(paste0(node_url, "files/"))) {
-        queue <- c(queue, list(list(kind = "folder", provider = p$attributes$provider,
-                                    url = p$relationships$files$links$related$href)))
-      }
-      for (k in osf_list(paste0(node_url, "children/"))) {
-        queue <- c(queue, list(list(kind = "node", type = k$type, id = k$id)))
-      }
+      queue <- c(queue, open_node(item))
       next
     }
 
-    # add-on storage (github, dropbox, ...) often fails, that is skipped and
-    # counted. a failure in osfstorage is thrown, so the object is retried
-    entries <- tryCatch(osf_list(item$url), error = function(e) {
-      if (item$provider == "osfstorage") stop(e)
-      NULL
-    })
+    entries <- list_folder(item)
     if (is.null(entries)) {
       n_skipped <- n_skipped + 1
       next
     }
-    for (e in entries) {
-      if (e$attributes$kind == "folder") {
-        queue <- c(queue, list(list(kind = "folder", provider = item$provider,
-                                    url = e$relationships$files$links$related$href)))
-      } else if (grepl(README_PATTERN, e$attributes$name, ignore.case = TRUE)) {
-        found <- c(found, list(readme_entry(e)))
-      }
-    }
+    is_folder <- vapply(entries, \(e) e$attributes$kind == "folder", logical(1))
+    subfolders <- lapply(entries[is_folder], \(e) folder_item(item$provider, files_url(e)))
+    queue <- c(queue, subfolders)
+    readmes <- Filter(\(e) grepl(README_PATTERN, e$attributes$name, ignore.case = TRUE),
+                      entries[!is_folder])
+    found <- c(found, lapply(readmes, readme_entry))
   }
 
-  found <- bind_rows(found)
-  attr(found, "n_skipped") <- n_skipped
-  found
+  list(files = bind_rows(found), n_skipped = n_skipped)
 }
 
 # text of a file. pdf and docx are converted, everything else (txt, md, rtf,
@@ -177,33 +192,36 @@ raw_to_text <- function(raw, file) {
   iconv(text, "UTF-8", "UTF-8", sub = " ")
 }
 
-# downloads the readmes of an object. for a link to a single file, the file
-# itself is the readme
-check_readmes <- function(obj, holder, n_expected) {
-  if (obj$type == "files") {
-    found <- readme_entry(obj)
-    attr(found, "n_skipped") <- 0
-  } else {
-    found <- find_readmes(holder$type, holder$id, n_expected)
+# a file that cannot be downloaded or converted has text NA
+download_text <- function(url, file) {
+  if (is.na(url)) return(list(status = NA_integer_, text = NA_character_))
+  resp <- osf_get(url)
+  text <- NA_character_
+  if (resp_status(resp) < 400) {
+    text <- tryCatch(raw_to_text(resp_body_raw(resp), file), error = function(e) NA_character_)
   }
-  n_skipped <- attr(found, "n_skipped")
-  if (nrow(found) == 0) return(list(texts = NULL, n_found = 0L, n_skipped = n_skipped))
+  list(status = resp_status(resp), text = text)
+}
 
-  found$status <- NA_integer_
-  found$text <- NA_character_
-  for (i in seq_len(nrow(found))) {
-    if (is.na(found$download[i])) next
-    resp <- osf_get(found$download[i])
-    found$status[i] <- resp_status(resp)
-    if (resp_status(resp) < 400) {
-      found$text[i] <- tryCatch(raw_to_text(resp_body_raw(resp), found$file[i]),
-                                error = function(e) NA_character_)
-    }
+# readme texts of an object. for a link to a single file, the file itself is
+# the readme
+check_readmes <- function(linked, ref, n_expected) {
+  if (linked$type == "files") {
+    found <- list(files = readme_entry(linked), n_skipped = 0)
+  } else {
+    found <- find_readmes(ref$type, ref$id, n_expected)
   }
-  texts <- found |>
+  files <- found$files
+  if (nrow(files) == 0) return(list(texts = NULL, n_found = 0L, n_skipped = found$n_skipped))
+
+  downloads <- lapply(seq_len(nrow(files)), \(i) download_text(files$download[i], files$file[i]))
+  files$status <- sapply(downloads, \(d) d$status)
+  files$text <- sapply(downloads, \(d) d$text)
+
+  texts <- files |>
     select(-download) |>
     mutate(source = "readme", .before = 1)
-  list(texts = texts, n_found = nrow(found), n_skipped = n_skipped)
+  list(texts = texts, n_found = nrow(files), n_skipped = found$n_skipped)
 }
 
 # passages around each mention. overlapping passages are merged, several are
@@ -221,57 +239,63 @@ license_passages <- function(text) {
   paste(passages, collapse = " [...] ")
 }
 
-check_object <- function(id) {
-  checked <- format(Sys.Date())
 
-  # guids/ works for any type of OSF id
-  g <- osf_get(paste0(API, "guids/", id, "/"))
-  if (resp_status(g) >= 400) {
-    return(tibble(osf_project = id, http_status = resp_status(g), checked = checked))
+# objects -----------------------------------------------------------------
+# the object of a linked id. for a file, the project or registration holding it
+# (same rule as Quintana's collect_osf_documentation.R)
+object_ref <- function(linked) {
+  if (linked$type == "files") {
+    return(linked$relationships$target$data %||% linked$relationships$node$data)
   }
-  obj <- resp_body_json(g)$data
+  linked
+}
 
-  # for a file, switch to the project or registration holding it
-  # (same rule as Quintana's collect_osf_documentation.R)
-  if (obj$type == "files") {
-    holder <- obj$relationships$target$data %||% obj$relationships$node$data
-  } else {
-    holder <- obj
-  }
-  if (!holder$type %in% c("nodes", "registrations")) {
-    return(tibble(osf_project = id, http_status = 200L, obj_type = obj$type, checked = checked))
-  }
+# direct children of an object, for their descriptions. an incomplete listing
+# could miss texts, so it throws and the object is tried again on the next run.
+# max. 16 children in the 2026-10-16 crawl, so one page of 100 is enough
+direct_children <- function(ref) {
+  resp <- osf_get(paste0(node_url(ref$type, ref$id), "children/"), "page[size]" = 100)
+  if (resp_status(resp) != 200) stop("child listing returned ", resp_status(resp))
+  body <- resp_body_json(resp)
+  if (body$links$meta$total > 100) stop("more than 100 children")
+  body$data
+}
 
-  node_url <- paste0(API, holder$type, "/", holder$id, "/")
-  n <- osf_get(node_url, embed = "license")
-  if (resp_status(n) >= 400) {
-    return(tibble(osf_project = id, http_status = resp_status(n), obj_type = obj$type,
-                  checked = checked))
-  }
-  node <- resp_body_json(n)$data
-
-  # an incomplete child listing could miss licenses, so it counts as a failure
-  # and the object is tried again on the next run.
-  # max. 16 children in the 2026-10-16 crawl, so one page of 100 is enough
-  k <- osf_get(paste0(node_url, "children/"), embed = "license", "page[size]" = 100)
-  if (resp_status(k) != 200) stop("child listing returned ", resp_status(k))
-  kids <- resp_body_json(k)
-  if (kids$links$meta$total > 100) stop("more than 100 children")
-
-  # descriptions of the object and its children are in the same responses
-  texts <- tibble(
+description_texts <- function(node, children) {
+  tibble(
     source = "description",
-    text_id = c(node$id, vapply(kids$data, \(k) k$id, "")),
+    text_id = c(node$id, vapply(children, \(k) k$id, "")),
     file = NA_character_,
     path = NA_character_,
     text = c(node$attributes$description %||% "",
-             vapply(kids$data, \(k) k$attributes$description %||% "", ""))
+             vapply(children, \(k) k$attributes$description %||% "", ""))
   )
+}
 
+# one row per linked id. n_readme is the number of readmes the deposit lists
+# for it, NA if none
+check_object <- function(id, n_readme) {
+  checked <- format(Sys.Date())
+  failed <- function(status, linked_type = NA_character_) {
+    tibble(osf_project = id, http_status = status, obj_type = linked_type, checked = checked)
+  }
+
+  # guids/ works for any type of OSF id
+  g <- osf_get(paste0(API, "guids/", id, "/"))
+  if (resp_status(g) >= 400) return(failed(resp_status(g)))
+  linked <- resp_body_json(g)$data
+
+  ref <- object_ref(linked)
+  if (!ref$type %in% c("nodes", "registrations")) return(failed(200L, linked$type))
+
+  n <- osf_get(node_url(ref$type, ref$id), embed = "license")
+  if (resp_status(n) >= 400) return(failed(resp_status(n), linked$type))
+  node <- resp_body_json(n)$data
+
+  texts <- description_texts(node, direct_children(ref))
   # readmes only where the deposit's file listing has one
-  n_readme <- readme_expected[id]
   readmes <- list(texts = NULL, n_found = NA_integer_, n_skipped = NA_integer_)
-  if (!is.na(n_readme)) readmes <- check_readmes(obj, holder, n_readme)
+  if (!is.na(n_readme)) readmes <- check_readmes(linked, ref, n_readme)
   texts <- bind_rows(texts, readmes$texts)
 
   lic <- license_name(node)
@@ -281,7 +305,7 @@ check_object <- function(id) {
   tibble(
     osf_project = id,
     http_status = 200L,
-    obj_type = obj$type,
+    obj_type = linked$type,
     holder_type = node$type,
     node_id = node$id,
     license_name = lic,
@@ -297,15 +321,17 @@ check_object <- function(id) {
   )
 }
 
+
+# components --------------------------------------------------------------
 # storage providers of a node, e.g. "osfstorage" or "github"
 storage_providers <- function(type, id) {
-  providers <- osf_list(paste0(API, type, "/", id, "/files/"))
+  providers <- osf_list(paste0(node_url(type, id), "files/"))
   vapply(providers, \(p) p$attributes$provider, "")
 }
 
 # repository of a github add-on as "user/repo". osf adds the branch after a colon
 github_repo <- function(id) {
-  r <- osf_get(paste0(API, "nodes/", id, "/addons/github/"))
+  r <- osf_get(paste0(node_url("nodes", id), "addons/github/"))
   if (resp_status(r) >= 400) stop("github add-on returned ", resp_status(r))
   sub(":.*$", "", resp_body_json(r)$data$attributes$folder_id %||% NA_character_)
 }
@@ -324,6 +350,21 @@ github_license <- function(repo) {
   resp_body_json(resp)$license$spdx_id %||% "none"
 }
 
+# storage of a node, and the github repository and its license if there is one.
+# registrations archive add-ons into osfstorage, so only nodes can have one
+node_storage <- function(type, id) {
+  providers <- storage_providers(type, id)
+  repo <- NA_character_
+  repo_license <- NA_character_
+  if ("github" %in% providers && type == "nodes") {
+    repo <- github_repo(id)
+    if (!is.na(repo)) repo_license <- github_license(repo)
+  }
+  tibble(providers = paste(providers, collapse = "; "),
+         github_repo = repo,
+         github_license = repo_license)
+}
+
 # all components below an object, at any depth, with their license and storage.
 # the first row is the object itself, its license is in osf_licenses.csv.
 # a failed listing throws, so the object is tried again on the next run
@@ -334,34 +375,48 @@ check_components <- function(type, id) {
   while (length(queue) > 0) {
     item <- queue[[1]]
     queue <- queue[-1]
-    kids <- osf_list(paste0(API, item$type, "/", item$id, "/children/?embed=license"))
-    for (k in kids) {
+    depth <- item$depth + 1L
+    for (k in osf_list(paste0(node_url(item$type, item$id), "children/?embed=license"))) {
       nodes <- c(nodes, list(tibble(component_id = k$id, component_type = k$type,
-                                    parent_id = item$id, depth = item$depth + 1L,
+                                    parent_id = item$id, depth = depth,
                                     license_name = license_name(k))))
-      queue <- c(queue, list(list(type = k$type, id = k$id, depth = item$depth + 1L)))
+      queue <- c(queue, list(list(type = k$type, id = k$id, depth = depth)))
     }
   }
   nodes <- bind_rows(nodes)
 
-  nodes$providers <- NA_character_
-  nodes$github_repo <- NA_character_
-  nodes$github_license <- NA_character_
-  for (i in seq_len(nrow(nodes))) {
-    providers <- storage_providers(nodes$component_type[i], nodes$component_id[i])
-    nodes$providers[i] <- paste(providers, collapse = "; ")
-    # registrations archive add-ons into osfstorage, so only projects have one
-    if ("github" %in% providers && nodes$component_type[i] == "nodes") {
-      nodes$github_repo[i] <- github_repo(nodes$component_id[i])
-      if (!is.na(nodes$github_repo[i])) {
-        nodes$github_license[i] <- github_license(nodes$github_repo[i])
-      }
+  storage <- lapply(seq_len(nrow(nodes)),
+                    \(i) node_storage(nodes$component_type[i], nodes$component_id[i]))
+  bind_cols(nodes, bind_rows(storage)) |>
+    mutate(node_id = id,
+           license_set = if_else(depth == 0, NA, is_licensed(license_name)),
+           checked = format(Sys.Date()))
+}
+
+
+# crawl with a cache ------------------------------------------------------
+# runs check() for every id that is not in the cache yet. a failed id is
+# reported and left out, so it is tried again on the next run. the cache is
+# saved regularly so an interrupted run loses little
+run_cached <- function(ids, check, cache_file, label) {
+  cache <- if (file.exists(cache_file)) readRDS(cache_file) else list()
+  todo <- setdiff(ids, names(cache))
+  message(length(ids), " ", label, ", ", length(todo), " not in cache yet")
+
+  for (i in seq_along(todo)) {
+    id <- todo[i]
+    res <- tryCatch(check(id), error = function(e) {
+      message(id, " failed: ", conditionMessage(e))
+      NULL
+    })
+    if (!is.null(res)) cache[[id]] <- res
+    if (i %% 25 == 0) {
+      saveRDS(cache, cache_file)
+      message(i, "/", length(todo))
     }
   }
-
-  mutate(nodes, node_id = id,
-         license_set = if_else(depth == 0, NA, is_licensed(license_name)),
-         checked = format(Sys.Date()))
+  saveRDS(cache, cache_file)
+  cache
 }
 
 
@@ -393,25 +448,7 @@ if (is.finite(N_TEST)) {
 
 
 # crawl -------------------------------------------------------------------
-cache <- if (file.exists(CACHE_FILE)) readRDS(CACHE_FILE) else list()
-todo <- setdiff(ids, names(cache))
-message(length(ids), " objects, ", length(todo), " not in cache yet")
-
-for (i in seq_along(todo)) {
-  id <- todo[i]
-  res <- tryCatch(check_object(id), error = function(e) {
-    message(id, " failed: ", conditionMessage(e))
-    NULL
-  })
-  if (!is.null(res)) cache[[id]] <- res
-
-  # save regularly so an interrupted run loses little
-  if (i %% 25 == 0) {
-    saveRDS(cache, CACHE_FILE)
-    message(i, "/", length(todo))
-  }
-}
-saveRDS(cache, CACHE_FILE)
+cache <- run_cached(ids, \(id) check_object(id, readme_expected[id]), CACHE_FILE, "objects")
 
 
 # save --------------------------------------------------------------------
@@ -461,14 +498,14 @@ write.csv(select(mentions, -passages), MENTION_FILE, row.names = FALSE, na = "")
 write.csv(select(mentions, all_of(key), osf_link, passages), PASSAGE_FILE,
           row.names = FALSE, na = "")
 
-res <- distinct(out, osf_project, .keep_all = TRUE)
-message("wrote ", nrow(out), " rows (", nrow(res), " objects) to ", OUT_FILE)
-message("failed, re-run to retry: ", sum(is.na(res$http_status)))
-print(count(res, http_status))
-print(count(res, license_name, sort = TRUE))
+objects <- distinct(out, osf_project, .keep_all = TRUE)
+message("wrote ", nrow(out), " rows (", nrow(objects), " objects) to ", OUT_FILE)
+message("failed, re-run to retry: ", sum(is.na(objects$http_status)))
+print(count(objects, http_status))
+print(count(objects, license_name, sort = TRUE))
 
 # readme objects where the walk found fewer files than the deposit lists
-res |>
+objects |>
   filter(!is.na(n_readme_expected)) |>
   count(all_found = n_readme_found >= n_readme_expected, storage_skipped = n_storage_skipped > 0) |>
   print()
@@ -483,25 +520,10 @@ print(count(mentions, source))
 holders <- crawled |>
   filter(!is.na(node_id)) |>
   distinct(holder_type, node_id)
+holder_types <- setNames(holders$holder_type, holders$node_id)
 
-comp_cache <- if (file.exists(COMP_CACHE_FILE)) readRDS(COMP_CACHE_FILE) else list()
-todo <- setdiff(holders$node_id, names(comp_cache))
-message(nrow(holders), " objects for the component walk, ", length(todo), " not in cache yet")
-
-for (i in seq_along(todo)) {
-  id <- todo[i]
-  type <- holders$holder_type[holders$node_id == id]
-  res <- tryCatch(check_components(type, id), error = function(e) {
-    message(id, " failed: ", conditionMessage(e))
-    NULL
-  })
-  if (!is.null(res)) comp_cache[[id]] <- res
-  if (i %% 25 == 0) {
-    saveRDS(comp_cache, COMP_CACHE_FILE)
-    message(i, "/", length(todo))
-  }
-}
-saveRDS(comp_cache, COMP_CACHE_FILE)
+comp_cache <- run_cached(holders$node_id, \(id) check_components(holder_types[[id]], id),
+                         COMP_CACHE_FILE, "objects for the component walk")
 
 components <- bind_rows(comp_cache[holders$node_id]) |>
   select(node_id, component_id, component_type, parent_id, depth, license_name,
