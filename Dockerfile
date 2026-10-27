@@ -6,10 +6,12 @@
 FROM rocker/r-ver:4.6.1
 
 # make for the Makefile, freetype and libpng for showtext (fonts in the figure),
-# poppler and libjpeg for pdftools and qpdf (readmes in 01)
+# poppler and libjpeg for pdftools and qpdf (readmes in 01).
+# the package binaries link against system libraries: libuv for fs, libsecret
+# for keyring. curl is what renv uses for downloads
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends make libfreetype-dev libpng-dev \
-       libpoppler-cpp-dev libjpeg-dev zlib1g-dev \
+    && apt-get install -y --no-install-recommends make curl libfreetype-dev libpng-dev \
+       libpoppler-cpp-dev libjpeg-dev zlib1g-dev libuv1-dev libsecret-1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # quarto for the supplement, same version as used locally. comes with pandoc

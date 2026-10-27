@@ -256,6 +256,18 @@ license_counts <- object_licenses |>
 print(license_counts)
 
 
+# year and journal --------------------------------------------------------
+# licenses are read at the crawl date, so older papers had more time to get one
+# and trends over years are hard to interpret. we only compare before and after
+# Psychological Science's open license requirement (submissions from 2024).
+# 2015 has only 45 papers (42 in Psych Sci), so it is pooled with 2020
+papers$period <- if_else(papers$year == 2025, "2025", "2015 & 2020")
+
+print(share_licensed(papers, journal, year), n = Inf)
+by_period <- share_licensed(papers, journal, period)
+print(by_period)
+
+
 # registrations -----------------------------------------------------------
 # OSF asks for a license when a registration is created, which raises the
 # 2025 rates as well. holder_type is the object whose license we read (for
@@ -359,7 +371,7 @@ plot_trend <- ggplot(by_period_all, aes(period, pct / 100, colour = journal, gro
   scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
   # room on the right for the labels
   scale_x_discrete(expand = expansion(add = c(0.25, 1.5))) +
-  labs(x = "Publication year", y = "% of papers with OSF materials that included a license") +
+  labs(x = "Publication year", y = "% of papers with OSF materials\nthat included a license") +
   theme_dv("h") +
   theme(axis.line.x = element_blank())
 
