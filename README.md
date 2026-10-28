@@ -54,7 +54,6 @@ You can check whether your own OSF projects have a license in two ways:
 - `license_mentions.csv`: one row per README or description that mentions a license, with a link to it and our hand coding
 - `license_by_paper.csv`: one row per paper, whether and through which source it is licensed
 - `manual_check.csv`, `manual_check_strata.csv`: one row per paper in the manual check sample
-- `*.rds`: caches of the crawl, used by `01` only
 
 [`data/codebook.csv`](data/codebook.csv) describes every column. Files join on `doi` (paper)
 and `node_id` (OSF object); for descriptions, `license_mentions.csv` joins
@@ -119,3 +118,5 @@ sourcing it to keep the snapshot.
 
 Code is licensed under MIT ([LICENSE](LICENSE)). Data, figures and the text of the
 supplement are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Data taken from Quintana's deposit (DOIs, journals, OSF links) are licensed under CC BY 4.0
+by Daniel S. Quintana.
