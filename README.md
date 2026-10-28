@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/1428340275.svg)](https://doi.org/10.5281/zenodo.23729169)
+
 # Licenses of shared OSF materials in psychology
 
 This repository contains code and data for the project: 
