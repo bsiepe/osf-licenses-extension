@@ -1,10 +1,10 @@
 #------------------------------------------------------------------------------#
 # Check whether your OSF projects have a license
-# Author: Björn Siepe
 #
 # check_osf_licenses() takes OSF links or IDs (projects, components,
 # registrations or files) or an OSF user ID, and returns one row per project
-# with its license. For links, direct components are checked too.
+# with its license and owners (admin contributors). For links, direct
+# components are checked too.
 # Public projects need no token. To include your private projects, create a
 # read-only token at https://osf.io/settings/tokens, run
 # Sys.setenv(OSF_PAT = "...") and use user = "me".
@@ -14,21 +14,37 @@ library(httr2)
 # helpers -----------------------------------------------------------------
 osf_get <- function(url, ..., token = Sys.getenv("OSF_PAT")) {
   req <- request(url) |>
-    req_url_query(...) |>
+    req_url_query(..., .multi = "explode") |>
     req_retry(max_tries = 3)
   if (nzchar(token)) req <- req_auth_bearer_token(req, token)
   resp_body_json(req_perform(req))
 }
 
+node_embeds <- c("license", "contributors")
+
 # all pages of a listing
-osf_list <- function(url) {
+osf_list <- function(url, embed = node_embeds) {
   out <- list()
   while (!is.null(url)) {
-    res <- osf_get(url, embed = "license", `page[size]` = 100)
+    res <- osf_get(url, embed = embed, `page[size]` = 100)
     out <- c(out, res$data)
     url <- res$links$`next`
   }
   out
+}
+
+# owners are the admin contributors, as only they can set the license.
+# the node request embeds the first 10 contributors, get the rest if there are more
+owners <- function(d) {
+  ctb <- d$embeds$contributors
+  if (is.null(ctb$data)) return(NA_character_)
+  ctb_list <- ctb$data
+  if (isTRUE(ctb$links$meta$total > length(ctb_list))) {
+    ctb_list <- osf_list(d$relationships$contributors$links$related$href, embed = "users")
+  }
+  admins <- Filter(\(x) identical(x$attributes$permission, "admin"), ctb_list)
+  nms <- vapply(admins, \(x) x$embeds$users$data$attributes$full_name %||% NA_character_, "")
+  paste(nms, collapse = "; ")
 }
 
 # "No license" is an explicit choice on OSF, so it counts as unlicensed
@@ -36,13 +52,14 @@ license_row <- function(d) {
   lic <- d$embeds$license$data$attributes$name %||% NA_character_
   data.frame(id = d$id, type = d$type, title = d$attributes$title,
              public = d$attributes$public, license = lic,
-             licensed = !is.na(lic) & lic != "No license",
+             licensed = !is.na(lic) & lic != "No license", owners = owners(d),
              url = paste0("https://osf.io/", d$id, "/"), note = NA_character_)
 }
 
 error_row <- function(id, msg) {
   data.frame(id = id, type = NA, title = NA, public = NA, license = NA,
-             licensed = NA, url = paste0("https://osf.io/", id, "/"), note = msg)
+             licensed = NA, owners = NA, url = paste0("https://osf.io/", id, "/"),
+             note = msg)
 }
 
 check_one <- function(id) {
@@ -56,7 +73,7 @@ check_one <- function(id) {
     return(error_row(id, paste("not a project:", obj$type)))
   }
   node_url <- paste0(api, obj$type, "/", obj$id, "/")
-  nodes <- c(list(osf_get(node_url, embed = "license")$data),
+  nodes <- c(list(osf_get(node_url, embed = node_embeds)$data),
              osf_list(paste0(node_url, "children/")))
   do.call(rbind, lapply(nodes, license_row))
 }

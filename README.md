@@ -14,6 +14,25 @@ The method, coding schemes, results and limitations are described in
 
 If you want to re-run our analyses, see [Reproducibility](#reproducibility).
 
+# Check your own OSF projects
+
+You can check whether your own OSF projects have a license in two ways:
+
+- Public projects: use the app at https://dsquintana.shinyapps.io/osf-license-check/.
+- Private projects: use [`check_osf_licenses.R`](check_osf_licenses.R) (needs `httr2`).
+  1. Create a token with the `osf.full_read` scope at https://osf.io/settings/tokens.
+  2. Run:
+
+     ```r
+     source("check_osf_licenses.R")
+     Sys.setenv(OSF_PAT = "your token")
+     res <- check_osf_licenses(user = "me")
+     res[!res$licensed %in% TRUE, c("title", "url", "owners")]
+     ```
+- The script returns one row per project, component and registration you contribute to, with its
+  license and owners (admin contributors, who can set the license). `"No license"` counts as unlicensed.
+- To check specific projects instead, pass links or IDs: `check_osf_licenses(c("https://osf.io/abcde/", "fghij"))`.
+
 # Overview
 
 ### Scripts
@@ -26,6 +45,7 @@ If you want to re-run our analyses, see [Reproducibility](#reproducibility).
 | `03_sample_manual_check.R` | Draws the sample for the manual check (run once) |
 | `04_evaluate_manual_check.R` | Compares the manual check with the crawled licenses |
 | `05_supplement.qmd` | Supplement: method, coding schemes, results tables |
+| `check_osf_licenses.R` | Checks the licenses of your own OSF projects (see above) |
 
 ### `data/`
 
