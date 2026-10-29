@@ -3,7 +3,7 @@
 # Licenses of shared OSF materials in psychology
 
 This repository contains code and data for the project: 
-> Siepe, B.S., Heck, D.W., Quintana, D. S. *Open research materials need explicit reuse licences*. 
+> Siepe, B.S., Heck, D.W., Quintana, D. S. *Open research materials need explicit reuse licences*. PsyArXiv Preprint, https://doi.org/10.31234/osf.io/4rjg3_v1
 
 It extends a previous analysis by Quintana:
 
